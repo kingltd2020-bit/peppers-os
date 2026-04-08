@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Peppers OS — Control Room</title>
+  <style>
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --surface2:  #1c2330;
+      --border:    #30363d;
+      --text:      #e6edf3;
+      --muted:     #7d8590;
+      --green:     #3fb950;
+      --green-dim: #1a3a22;
+      --yellow:    #d29922;
+      --yellow-dim:#332b00;
+      --gray:      #6e7681;
+      --gray-dim:  #21262d;
+      --blue:      #58a6ff;
+      --orange:    #f0883e;
+      --radius:    12px;
+      --gap:       20px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      font-size: 15px;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, #161b22 0%, #1c2330 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 24px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .logo-icon {
+      width: 44px; height: 44px;
+      background: linear-gradient(135deg, #3fb950, #58a6ff);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+    }
+    .logo-text h1 {
+      font-size: 22px; font-weight: 700; color: var(--text);
+    }
+    .logo-text p {
+      font-size: 12px; color: var(--muted); direction: ltr;
+    }
+    .header-stats {
+      display: flex; gap: 20px; flex-wrap: wrap;
+    }
+    .stat-pill {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 6px 16px;
+      font-size: 13px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .dot-green  { background: var(--green);  box-shadow: 0 0 6px var(--green); }
+    .dot-yellow { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+    .dot-gray   { background: var(--gray); }
+
+    /* ── Layout ── */
+    main { padding: 32px; max-width: 1400px; margin: 0 auto; }
+    section { margin-bottom: 48px; }
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* ── Data Flow ── */
+    .flow-container {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      overflow-x: auto;
+    }
+    .flow {
+      display: flex;
+      align-items: stretch;
+      gap: 0;
+      min-width: 640px;
+    }
+    .flow-stage {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      position: relative;
+    }
+    .flow-stage:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      right: -1px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 2px;
+      height: 60%;
+      background: var(--border);
+    }
+    .flow-stage-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .flow-node {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 13px;
+      text-align: center;
+      width: 100%;
+      max-width: 160px;
+      transition: border-color 0.2s;
+    }
+    .flow-node:hover { border-color: var(--blue); }
+    .flow-node.source  { border-color: #30363d; }
+    .flow-node.agent   { border-color: var(--green); background: var(--green-dim); }
+    .flow-node.agent.planned { border-color: var(--yellow); background: var(--yellow-dim); }
+    .flow-node.storage { border-color: var(--blue); background: #0d2340; }
+    .flow-node.output  { border-color: var(--orange); background: #2d1a00; }
+    .flow-node .node-icon { font-size: 18px; display: block; margin-bottom: 4px; }
+    .flow-node .node-label { font-size: 12px; color: var(--muted); }
+
+    .arrow-col {
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      color: var(--border);
+      font-size: 22px;
+      flex-shrink: 0;
+      padding-top: 24px;
+    }
+
+    /* ── Agent Cards Grid ── */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: var(--gap);
+    }
+    .agent-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+      position: relative;
+      overflow: hidden;
+    }
+    .agent-card::before {
+      content: '';
+      position: absolute;
+      top: 0; right: 0; left: 0;
+      height: 3px;
+      border-radius: var(--radius) var(--radius) 0 0;
+    }
+    .agent-card.working::before  { background: var(--green); }
+    .agent-card.planned::before  { background: var(--yellow); }
+    .agent-card.unknown::before  { background: var(--gray); }
+    .agent-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    .agent-card.working:hover  { border-color: var(--green); }
+    .agent-card.planned:hover  { border-color: var(--yellow); }
+    .agent-card.unknown:hover  { border-color: var(--gray); }
+
+    .card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .card-icon {
+      width: 40px; height: 40px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+    .working  .card-icon { background: var(--green-dim); }
+    .planned  .card-icon { background: var(--yellow-dim); }
+    .unknown  .card-icon { background: var(--gray-dim); }
+
+    .status-badge {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 3px 10px;
+      border-radius: 20px;
+      display: flex; align-items: center; gap: 5px;
+    }
+    .working  .status-badge { background: var(--green-dim);  color: var(--green); }
+    .planned  .status-badge { background: var(--yellow-dim); color: var(--yellow); }
+    .unknown  .status-badge { background: var(--gray-dim);   color: var(--gray); }
+
+    .card-name {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 2px;
+      direction: ltr;
+      text-align: right;
+    }
+    .card-name-he {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+    .card-desc {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .card-tags {
+      margin-top: 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .tag {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 11px;
+      color: var(--muted);
+      direction: ltr;
+    }
+
+    /* ── Legend ── */
+    .legend {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .legend-bar {
+      width: 28px; height: 4px;
+      border-radius: 2px;
+    }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center;
+      padding: 24px;
+      color: var(--muted);
+      font-size: 12px;
+      border-top: 1px solid var(--border);
+      direction: ltr;
+    }
+
+    /* ── Mobile ── */
+    @media (max-width: 600px) {
+      header  { padding: 16px; }
+      main    { padding: 16px; }
+      .flow   { min-width: 500px; }
+      .cards-grid { grid-template-columns: 1fr; }
+      .header-stats { gap: 10px; }
+      .stat-pill { font-size: 12px; padding: 5px 12px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════ HEADER ══════════════════ -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">🌶️</div>
+    <div class="logo-text">
+      <h1>Peppers OS — חדר שליטה</h1>
+      <p>Control Room · v2026.04</p>
+    </div>
+  </div>
+  <div class="header-stats">
+    <div class="stat-pill"><span class="dot dot-green"></span> 3 Working</div>
+    <div class="stat-pill"><span class="dot dot-yellow"></span> 5 Planned</div>
+    <div class="stat-pill"><span class="dot dot-gray"></span> 5 Unknown</div>
+    <div class="stat-pill">🗂️ 13 Agents Total</div>
+  </div>
+</header>
+
+<!-- ══════════════════ MAIN ══════════════════ -->
+<main>
+
+  <!-- ── DATA FLOW ── -->
+  <section>
+    <div class="section-title">📡 זרימת נתונים — Data Flow</div>
+    <div class="flow-container">
+      <div class="flow">
+
+        <!-- INPUTS -->
+        <div class="flow-stage">
+          <div class="flow-stage-label">קלט · Inputs</div>
+          <div class="flow-node source"><span class="node-icon">📧</span>Gmail<span class="node-label">חשבוניות ספקים</span></div>
+          <div class="flow-node source"><span class="node-icon">🏦</span>Bank Statements<span class="node-label">דיסקונט / לאומי</span></div>
+          <div class="flow-node source"><span class="node-icon">🖥️</span>Komax POS<span class="node-label">Z-Reports / מכירות</span></div>
+          <div class="flow-node source"><span class="node-icon">📁</span>Google Drive<span class="node-label">מסמכי ספקים</span></div>
+        </div>
+
+        <div class="arrow-col">›</div>
+
+        <!-- AGENTS -->
+        <div class="flow-stage">
+          <div class="flow-stage-label">עיבוד · Agents</div>
+          <div class="flow-node agent"><span class="node-icon">🧾</span>invoice_agent<span class="node-label">OCR + Classification</span></div>
+          <div class="flow-node agent planned"><span class="node-icon">🏦</span>banks_agent<span class="node-label">Bank Reconciliation</span></div>
+          <div class="flow-node agent planned"><span class="node-icon">📊</span>sales_agent<span class="node-label">Sales Analytics</span></div>
+          <div class="flow-node agent planned"><span class="node-icon">🛒</span>purchases_agent<span class="node-label">Purchase Tracking</span></div>
+        </div>
+
+        <div class="arrow-col">›</div>
+
+        <!-- STORAGE -->
+        <div class="flow-stage">
+          <div class="flow-stage-label">אחסון · Storage</div>
+          <div class="flow-node storage"><span class="node-icon">☁️</span>BigQuery<span class="node-label">fact_supplier_docs</span></div>
+          <div class="flow-node storage"><span class="node-icon">☁️</span>BigQuery<span class="node-label">fact_sales_item_daily</span></div>
+          <div class="flow-node storage"><span class="node-icon">☁️</span>BigQuery<span class="node-label">fact_purchases_daily</span></div>
+          <div class="flow-node storage"><span class="node-icon">☁️</span>BigQuery<span class="node-label">fact_bank_discount_osh</span></div>
+        </div>
+
+        <div class="arrow-col">›</div>
+
+        <!-- OUTPUTS -->
+        <div class="flow-stage">
+          <div class="flow-stage-label">פלט · Outputs</div>
+          <div class="flow-node output"><span class="node-icon">📦</span>send_invoices<span class="node-label">ZIPs → רואה חשבון</span></div>
+          <div class="flow-node output"><span class="node-icon">📋</span>digest_agent<span class="node-label">Daily Digest</span></div>
+          <div class="flow-node output"><span class="node-icon">📊</span>Google Sheets<span class="node-label">Control Center</span></div>
+          <div class="flow-node output"><span class="node-icon">💬</span>Telegram Bot<span class="node-label">Alerts &amp; Commands</span></div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ── AGENTS ── -->
+  <section>
+    <div class="section-title">🤖 סוכנים — Agents</div>
+
+    <div class="legend">
+      <div class="legend-item"><div class="legend-bar" style="background:var(--green)"></div> פועל — Working</div>
+      <div class="legend-item"><div class="legend-bar" style="background:var(--yellow)"></div> מתוכנן — Planned</div>
+      <div class="legend-item"><div class="legend-bar" style="background:var(--gray)"></div> לא ידוע — Unknown</div>
+    </div>
+
+    <div class="cards-grid">
+
+      <!-- ── WORKING ── -->
+      <div class="agent-card working">
+        <div class="card-header">
+          <div class="card-icon">🧾</div>
+          <div class="status-badge"><span class="dot dot-green"></span>Working</div>
+        </div>
+        <div class="card-name">invoice_agent</div>
+        <div class="card-name-he">סוכן חשבוניות</div>
+        <div class="card-desc">מוריד קבצים מ-Gmail, מריץ OCR, מסווג לפי ספק, שומר ב-Drive ומייצא ל-CSV.</div>
+        <div class="card-tags">
+          <span class="tag">gmail</span><span class="tag">ocr</span><span class="tag">classification</span><span class="tag">drive</span>
+        </div>
+      </div>
+
+      <div class="agent-card working">
+        <div class="card-header">
+          <div class="card-icon">📦</div>
+          <div class="status-badge"><span class="dot dot-green"></span>Working</div>
+        </div>
+        <div class="card-name">send_invoices</div>
+        <div class="card-name-he">שליחת חשבוניות לרו"ח</div>
+        <div class="card-desc">אוסף PDF מתיקיית החשבוניות, מרכיב ZIP לפי אצוות של 10, ושולח בדוא"ל לרואה חשבון.</div>
+        <div class="card-tags">
+          <span class="tag">smtp</span><span class="tag">zip</span><span class="tag">batch</span><span class="tag">email</span>
+        </div>
+      </div>
+
+      <div class="agent-card working">
+        <div class="card-header">
+          <div class="card-icon">🔍</div>
+          <div class="status-badge"><span class="dot dot-green"></span>Working</div>
+        </div>
+        <div class="card-name">supplier_docs_scanner</div>
+        <div class="card-name-he">סורק מסמכי ספקים</div>
+        <div class="card-desc">סורק את Drive לזיהוי מסמכים חדשים של ספקים, ממיין ומכניס לתיקיות הנכונות.</div>
+        <div class="card-tags">
+          <span class="tag">drive</span><span class="tag">scan</span><span class="tag">suppliers</span>
+        </div>
+      </div>
+
+      <!-- ── PLANNED ── -->
+      <div class="agent-card planned">
+        <div class="card-header">
+          <div class="card-icon">🏦</div>
+          <div class="status-badge"><span class="dot dot-yellow"></span>Planned</div>
+        </div>
+        <div class="card-name">banks_agent</div>
+        <div class="card-name-he">סוכן בנקים</div>
+        <div class="card-desc">מעבד דפי חשבון מדיסקונט ולאומי, מנרמל ומטעין ל-BigQuery לניתוח תזרים.</div>
+        <div class="card-tags">
+          <span class="tag">bank</span><span class="tag">discount</span><span class="tag">leumi</span><span class="tag">bigquery</span>
+        </div>
+      </div>
+
+      <div class="agent-card planned">
+        <div class="card-header">
+          <div class="card-icon">💳</div>
+          <div class="status-badge"><span class="dot dot-yellow"></span>Planned</div>
+        </div>
+        <div class="card-name">payments_agent</div>
+        <div class="card-name-he">סוכן תשלומים</div>
+        <div class="card-desc">מנהל יומן תשלומים — מעדכן BigQuery עם תשלומים לספקים, חריגות וסטטוס.</div>
+        <div class="card-tags">
+          <span class="tag">payments</span><span class="tag">journal</span><span class="tag">bigquery</span>
+        </div>
+      </div>
+
+      <div class="agent-card planned">
+        <div class="card-header">
+          <div class="card-icon">📈</div>
+          <div class="status-badge"><span class="dot dot-yellow"></span>Planned</div>
+        </div>
+        <div class="card-name">sales_agent</div>
+        <div class="card-name-he">סוכן מכירות</div>
+        <div class="card-desc">מעבד נתוני מכירות יומיים מ-Komax, בונה fact_sales_item_daily ב-BigQuery.</div>
+        <div class="card-tags">
+          <span class="tag">sales</span><span class="tag">komax</span><span class="tag">bigquery</span><span class="tag">daily</span>
+        </div>
+      </div>
+
+      <div class="agent-card planned">
+        <div class="card-header">
+          <div class="card-icon">🛒</div>
+          <div class="status-badge"><span class="dot dot-yellow"></span>Planned</div>
+        </div>
+        <div class="card-name">purchases_agent</div>
+        <div class="card-name-he">סוכן רכש</div>
+        <div class="card-desc">מאגד חשבוניות רכש לפי ספק ויום, מייצר fact_purchases_daily ומחשב מרווחים.</div>
+        <div class="card-tags">
+          <span class="tag">purchasing</span><span class="tag">suppliers</span><span class="tag">margins</span>
+        </div>
+      </div>
+
+      <div class="agent-card planned">
+        <div class="card-header">
+          <div class="card-icon">📊</div>
+          <div class="status-badge"><span class="dot dot-yellow"></span>Planned</div>
+        </div>
+        <div class="card-name">z_reports_agent</div>
+        <div class="card-name-he">סוכן דוחות Z</div>
+        <div class="card-desc">קורא דוחות Z יומיים מ-ComQuest, מפרק לפי מחלקה, מטעין ל-fact_z_dept.</div>
+        <div class="card-tags">
+          <span class="tag">z-report</span><span class="tag">comquest</span><span class="tag">departments</span>
+        </div>
+      </div>
+
+      <!-- ── UNKNOWN ── -->
+      <div class="agent-card unknown">
+        <div class="card-header">
+          <div class="card-icon">🎼</div>
+          <div class="status-badge"><span class="dot dot-gray"></span>Unknown</div>
+        </div>
+        <div class="card-name">maestro</div>
+        <div class="card-name-he">מאסטרו — מנצח ראשי</div>
+        <div class="card-desc">מתזמר את כל הסוכנים — מריץ בסדר נכון, מנהל תלויות, מדווח על כשלים.</div>
+        <div class="card-tags">
+          <span class="tag">orchestrator</span><span class="tag">scheduler</span>
+        </div>
+      </div>
+
+      <div class="agent-card unknown">
+        <div class="card-header">
+          <div class="card-icon">📰</div>
+          <div class="status-badge"><span class="dot dot-gray"></span>Unknown</div>
+        </div>
+        <div class="card-name">digest_agent</div>
+        <div class="card-name-he">סוכן תקציר יומי</div>
+        <div class="card-desc">מרכיב תקציר יומי ממכירות, רכש ותזרים — שולח ל-Telegram ול-Google Docs.</div>
+        <div class="card-tags">
+          <span class="tag">digest</span><span class="tag">telegram</span><span class="tag">reporting</span>
+        </div>
+      </div>
+
+      <div class="agent-card unknown">
+        <div class="card-header">
+          <div class="card-icon">🖥️</div>
+          <div class="status-badge"><span class="dot dot-gray"></span>Unknown</div>
+        </div>
+        <div class="card-name">komax_ingestion</div>
+        <div class="card-name-he">קליטת קומקס</div>
+        <div class="card-desc">מייבא נתוני POS מ-Komax, ממיר פורמט קנייני ומטעין למחסן הנתונים.</div>
+        <div class="card-tags">
+          <span class="tag">komax</span><span class="tag">pos</span><span class="tag">etl</span>
+        </div>
+      </div>
+
+      <div class="agent-card unknown">
+        <div class="card-header">
+          <div class="card-icon">💼</div>
+          <div class="status-badge"><span class="dot dot-gray"></span>Unknown</div>
+        </div>
+        <div class="card-name">commercial_agent</div>
+        <div class="card-name-he">סוכן מסחרי</div>
+        <div class="card-desc">מנתח מחירים, מרווחים ומבצעים — מזהה חריגות ומציע שינויי תמחור.</div>
+        <div class="card-tags">
+          <span class="tag">pricing</span><span class="tag">margins</span><span class="tag">promotions</span>
+        </div>
+      </div>
+
+      <div class="agent-card unknown">
+        <div class="card-header">
+          <div class="card-icon">🧹</div>
+          <div class="status-badge"><span class="dot dot-gray"></span>Unknown</div>
+        </div>
+        <div class="card-name">clearing_agent</div>
+        <div class="card-name-he">סוכן סליקה</div>
+        <div class="card-desc">מסלק תשלומי כרטיסי אשראי מול Visa/CAL, מתאים לחשבוניות ומזהה הפרשים.</div>
+        <div class="card-tags">
+          <span class="tag">clearing</span><span class="tag">visa</span><span class="tag">reconciliation</span>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── BIGQUERY TABLES ── -->
+  <section>
+    <div class="section-title">☁️ טבלאות BigQuery — Schema Registry</div>
+    <div class="cards-grid" style="grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));">
+
+      <div style="background:var(--surface);border:1px solid #0d2340;border-radius:var(--radius);padding:16px;border-top:3px solid var(--blue);">
+        <div style="font-size:13px;font-weight:700;color:var(--blue);direction:ltr;margin-bottom:4px;">fact_supplier_docs</div>
+        <div style="font-size:12px;color:var(--muted);">מסמכי ספקים — חשבוניות ומסמכי רכש</div>
+        <div style="margin-top:8px;"><span class="tag">invoice_agent</span></div>
+      </div>
+
+      <div style="background:var(--surface);border:1px solid #0d2340;border-radius:var(--radius);padding:16px;border-top:3px solid var(--blue);">
+        <div style="font-size:13px;font-weight:700;color:var(--blue);direction:ltr;margin-bottom:4px;">fact_sales_item_daily</div>
+        <div style="font-size:12px;color:var(--muted);">מכירות יומיות לפי פריט</div>
+        <div style="margin-top:8px;"><span class="tag">sales_agent</span></div>
+      </div>
+
+      <div style="background:var(--surface);border:1px solid #0d2340;border-radius:var(--radius);padding:16px;border-top:3px solid var(--blue);">
+        <div style="font-size:13px;font-weight:700;color:var(--blue);direction:ltr;margin-bottom:4px;">fact_purchases_daily</div>
+        <div style="font-size:12px;color:var(--muted);">רכש יומי מצטבר לפי ספק</div>
+        <div style="margin-top:8px;"><span class="tag">purchases_agent</span></div>
+      </div>
+
+      <div style="background:var(--surface);border:1px solid #0d2340;border-radius:var(--radius);padding:16px;border-top:3px solid var(--blue);">
+        <div style="font-size:13px;font-weight:700;color:var(--blue);direction:ltr;margin-bottom:4px;">fact_bank_discount_osh</div>
+        <div style="font-size:12px;color:var(--muted);">עסקאות בנק דיסקונט</div>
+        <div style="margin-top:8px;"><span class="tag">banks_agent</span></div>
+      </div>
+
+      <div style="background:var(--surface);border:1px solid #0d2340;border-radius:var(--radius);padding:16px;border-top:3px solid var(--blue);">
+        <div style="font-size:13px;font-weight:700;color:var(--blue);direction:ltr;margin-bottom:4px;">fact_z_dept</div>
+        <div style="font-size:12px;color:var(--muted);">דוחות Z לפי מחלקה</div>
+        <div style="margin-top:8px;"><span class="tag">z_reports_agent</span></div>
+      </div>
+
+      <div style="background:var(--surface);border:1px solid #0d2340;border-radius:var(--radius);padding:16px;border-top:3px solid var(--blue);">
+        <div style="font-size:13px;font-weight:700;color:var(--blue);direction:ltr;margin-bottom:4px;">stg_journal_payments_clean</div>
+        <div style="font-size:12px;color:var(--muted);">יומן תשלומים מנורמל</div>
+        <div style="margin-top:8px;"><span class="tag">payments_agent</span></div>
+      </div>
+
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  Peppers OS Control Room · Built with Claude Code · Last updated: <span id="ts"></span>
+</footer>
+
+<script>
+  document.getElementById('ts').textContent = new Date().toLocaleDateString('he-IL', {
+    year: 'numeric', month: 'long', day: 'numeric'
+  });
+</script>
+</body>
+</html>
