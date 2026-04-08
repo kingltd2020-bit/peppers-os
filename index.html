@@ -315,9 +315,9 @@
   </div>
   <div class="header-stats">
     <div class="stat-pill"><span class="dot dot-green"></span> 3 Working</div>
-    <div class="stat-pill"><span class="dot dot-yellow"></span> 5 Planned</div>
+    <div class="stat-pill"><span class="dot dot-yellow"></span> 8 Planned</div>
     <div class="stat-pill"><span class="dot dot-gray"></span> 5 Unknown</div>
-    <div class="stat-pill">🗂️ 13 Agents Total</div>
+    <div class="stat-pill" style="border-color:var(--blue);color:var(--blue);">🗂️ Structure: Unified</div>
   </div>
 </header>
 
@@ -372,6 +372,61 @@
           <div class="flow-node output"><span class="node-icon">💬</span>Telegram Bot<span class="node-label">Alerts &amp; Commands</span></div>
         </div>
 
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CODEBASE STRUCTURE ── -->
+  <section>
+    <div class="section-title">🗂️ מבנה קוד — PeppersOS Structure</div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;">
+
+        <div style="background:var(--surface2);border:1px solid var(--green);border-radius:8px;padding:16px;border-top:3px solid var(--green);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <code style="color:var(--green);font-size:13px;">agents/invoice_agent/</code>
+            <span style="font-size:11px;font-weight:600;background:var(--green-dim);color:var(--green);padding:2px 8px;border-radius:10px;">WORKING</span>
+          </div>
+          <div style="font-size:13px;color:var(--muted);">Gmail &#8594; OCR &#8594; Drive</div>
+          <div style="margin-top:8px;font-size:12px;color:var(--muted);direction:ltr;">main.py &middot; config.py &middot; gmail_client.py<br>classifier.py &middot; ocr_extractor.py &middot; backfill/</div>
+        </div>
+
+        <div style="background:var(--surface2);border:1px solid var(--yellow);border-radius:8px;padding:16px;border-top:3px solid var(--yellow);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <code style="color:var(--yellow);font-size:13px;">agents/banks_agent.py</code>
+            <span style="font-size:11px;font-weight:600;background:var(--yellow-dim);color:var(--yellow);padding:2px 8px;border-radius:10px;">PLANNED</span>
+          </div>
+          <div style="font-size:13px;color:var(--muted);">Bank statements &#8594; BigQuery</div>
+          <div style="margin-top:8px;font-size:12px;color:var(--muted);">דיסקונט &middot; לאומי &middot; fact_bank_discount_osh</div>
+        </div>
+
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:16px;border-top:3px solid var(--blue);">
+          <div style="margin-bottom:8px;">
+            <code style="color:var(--blue);font-size:13px;">shared/</code>
+          </div>
+          <div style="font-size:13px;color:var(--muted);">Shared utilities</div>
+          <div style="margin-top:8px;font-size:12px;color:var(--muted);direction:ltr;">db.py &middot; peppers_bot.py &middot; setup_oauth.py</div>
+        </div>
+
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:16px;border-top:3px solid var(--blue);">
+          <div style="margin-bottom:8px;">
+            <code style="color:var(--blue);font-size:13px;">tools/</code>
+          </div>
+          <div style="font-size:13px;color:var(--muted);">Standalone scripts</div>
+          <div style="margin-top:8px;font-size:12px;color:var(--muted);direction:ltr;">ocr_invoices.py &middot; classify_doc_types.py<br>send_invoices.py &middot; supplier_docs_scanner.py</div>
+        </div>
+
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:16px;border-top:3px solid var(--orange);">
+          <div style="margin-bottom:8px;">
+            <code style="color:var(--orange);font-size:13px;">backend/</code>
+          </div>
+          <div style="font-size:13px;color:var(--muted);">FastAPI REST API</div>
+          <div style="margin-top:8px;font-size:12px;color:var(--muted);direction:ltr;">main.py &middot; api/v1/ &middot; models/ &middot; schemas/<br>services/agent_runner.py</div>
+        </div>
+
+      </div>
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);font-size:12px;color:var(--muted);direction:ltr;">
+        C:\Users\jaico\PeppersOS\ &mdash; unified from 3 separate codebases (2026-04-08) &middot; 73 files
       </div>
     </div>
   </section>
