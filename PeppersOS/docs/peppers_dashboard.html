@@ -1,0 +1,571 @@
+<!doctype html>
+<html dir="rtl" lang="he">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Peppers — Dashboard מכר/רכש</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    :root{
+      --green:#1a4a2e;
+      --bg:#f5f5f3;
+      --card:#ffffff;
+      --border:#e8e8e4;
+      --muted:#6b7280;
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:var(--bg);color:#111827;padding:24px 16px}
+    .container{max-width:1100px;margin:0 auto}
+    .header{background:var(--green);color:#fff;border-radius:14px;padding:22px 24px;margin-bottom:14px}
+    .header h1{font-size:20px;font-weight:650;margin-bottom:6px}
+    .header p{font-size:12px;opacity:.85;line-height:1.6}
+    .grid{display:grid;grid-template-columns:1.2fr .8fr;gap:12px}
+    @media (max-width: 980px){.grid{grid-template-columns:1fr}}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px}
+    .card h2{font-size:14px;font-weight:650;color:#111827;margin-bottom:10px}
+    .row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+    .field{display:flex;flex-direction:column;gap:6px;min-width:220px}
+    .field label{font-size:12px;color:var(--muted)}
+    input[type="file"], input[type="date"], select{
+      border:1px solid #d1d5db;border-radius:10px;padding:9px 10px;font-size:13px;background:#fff
+    }
+    button{
+      border:1px solid var(--green);
+      background:var(--green);
+      color:#fff;border-radius:10px;padding:10px 14px;
+      font-size:13px;font-weight:650;cursor:pointer
+    }
+    button.secondary{background:#fff;color:var(--green)}
+    button:disabled{opacity:.55;cursor:not-allowed}
+    .note{margin-top:10px;font-size:12px;color:var(--muted);line-height:1.6}
+    .status{margin-top:10px;font-size:12px}
+    .status.ok{color:#065f46}
+    .status.err{color:#991b1b}
+    .tabs{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 12px}
+    .tab{border:1px solid #d1d5db;border-radius:10px;padding:8px 12px;background:#fff;font-size:13px;cursor:pointer}
+    .tab.active{background:var(--green);border-color:var(--green);color:#fff;font-weight:650}
+    .tabpan{display:none}
+    .tabpan.active{display:block}
+    .canvas-wrap{height:420px}
+    @media (max-width: 600px){.canvas-wrap{height:360px}}
+    .metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:10px}
+    @media (max-width: 600px){.metrics{grid-template-columns:1fr}}
+    .metric{border:1px solid var(--border);border-radius:12px;padding:12px 14px;background:#fff}
+    .metric .k{font-size:12px;color:var(--muted);margin-bottom:6px}
+    .metric .v{font-size:18px;font-weight:750}
+    .footer{margin-top:18px;text-align:center;color:#9ca3af;font-size:11px}
+    code{background:#eef2f7;padding:1px 6px;border-radius:8px}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Peppers — Dashboard מכר/רכש (Excel → Charts)</h1>
+      <p>
+        עובד מקומית וב‑GitHub: בחר/י את שני קבצי האקסל (מכר + רכש) והדשבורד ינתח אותם עם <code>header=1</code> (כלומר שורת הכותרות היא השורה השנייה).
+        <br/>עיצוב RTL/עברית, Chart.js. צבע מותג: <code>#1a4a2e</code>.
+      </p>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>קבצים + פילטר תאריכים</h2>
+        <div class="row">
+          <div class="field">
+            <label>קובץ מכר (XLS/XLSX)</label>
+            <input id="salesFile" type="file" accept=".xls,.xlsx" />
+          </div>
+          <div class="field">
+            <label>קובץ רכש (XLS/XLSX)</label>
+            <input id="purchasesFile" type="file" accept=".xls,.xlsx" />
+          </div>
+          <div class="field">
+            <label>מתאריך</label>
+            <input id="fromDate" type="date" />
+          </div>
+          <div class="field">
+            <label>עד תאריך</label>
+            <input id="toDate" type="date" />
+          </div>
+          <div class="field" style="min-width:160px">
+            <label>Top N (מחלקות/ספקים)</label>
+            <select id="topN">
+              <option value="5">5</option>
+              <option value="8" selected>8</option>
+              <option value="12">12</option>
+              <option value="20">20</option>
+            </select>
+          </div>
+          <div class="field" style="min-width:150px">
+            <button id="runBtn">נתח והצג</button>
+          </div>
+          <div class="field" style="min-width:150px">
+            <button id="resetBtn" class="secondary" type="button">נקה</button>
+          </div>
+        </div>
+        <div id="status" class="status"></div>
+        <div class="note">
+          טיפ: אם את/ה עובד/ת עם הקבצים האלו, פשוט בחר/י אותם:
+          <br/>
+          - מכר: <code>C:\Users\jaico\PeppersOS\data\sales\29_04_2026_01_01_2026 … .xlsx</code>
+          <br/>
+          - רכש: <code>C:\Users\jaico\PeppersOS\data\purchases\…29_04_2026… .xlsx</code>
+        </div>
+
+        <div class="metrics" id="metrics" style="display:none"></div>
+      </div>
+
+      <div class="card">
+        <h2>תצוגות</h2>
+        <div class="tabs">
+          <button class="tab active" data-tab="t1">1. רווח גולמי לפי חודש</button>
+          <button class="tab" data-tab="t2">2. רווח לפי מחלקה</button>
+          <button class="tab" data-tab="t3">3. רווח לפי ספק</button>
+        </div>
+
+        <div id="t1" class="tabpan active">
+          <div class="canvas-wrap"><canvas id="chartMonthly"></canvas></div>
+        </div>
+        <div id="t2" class="tabpan">
+          <div class="canvas-wrap"><canvas id="chartDept"></canvas></div>
+        </div>
+        <div id="t3" class="tabpan">
+          <div class="canvas-wrap"><canvas id="chartSupplier"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">PeppersOS • peppers_dashboard.html • מקומי בלבד (ללא BigQuery)</div>
+  </div>
+
+  <script>
+    const BRAND = "#1a4a2e";
+
+    const els = {
+      salesFile: document.getElementById("salesFile"),
+      purchasesFile: document.getElementById("purchasesFile"),
+      fromDate: document.getElementById("fromDate"),
+      toDate: document.getElementById("toDate"),
+      topN: document.getElementById("topN"),
+      runBtn: document.getElementById("runBtn"),
+      resetBtn: document.getElementById("resetBtn"),
+      status: document.getElementById("status"),
+      metrics: document.getElementById("metrics"),
+    };
+
+    function setStatus(msg, kind="ok") {
+      els.status.textContent = msg || "";
+      els.status.className = "status " + (kind === "err" ? "err" : "ok");
+    }
+
+    function fmtILS(n) {
+      if (n == null || Number.isNaN(n)) return "—";
+      return "₪" + n.toLocaleString("he-IL", { maximumFractionDigits: 0 });
+    }
+
+    function fmtPct(n) {
+      if (n == null || Number.isNaN(n)) return "—";
+      return n.toLocaleString("he-IL", { maximumFractionDigits: 1 }) + "%";
+    }
+
+    function monthKey(d) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      return `${y}-${m}`;
+    }
+
+    function parseExcelDate(v) {
+      if (v == null) return null;
+      if (v instanceof Date) return v;
+      if (typeof v === "number") {
+        // Excel serial date (rough handling)
+        const epoch = new Date(Date.UTC(1899, 11, 30));
+        return new Date(epoch.getTime() + v * 86400000);
+      }
+      if (typeof v === "string") {
+        const s = v.trim();
+        if (!s) return null;
+        // Accept YYYY-MM-DD or DD/MM/YYYY
+        const iso = Date.parse(s);
+        if (!Number.isNaN(iso)) return new Date(iso);
+        const m = s.match(/^(\d{1,2})[\/.](\d{1,2})[\/.](\d{4})/);
+        if (m) return new Date(Number(m[3]), Number(m[2])-1, Number(m[1]));
+      }
+      return null;
+    }
+
+    function cleanStr(v) {
+      if (v == null) return "";
+      return String(v).replace(/[\u200e\u200f\u202a-\u202e\ufeff\u00a0]/g, "").trim();
+    }
+
+    function normCol(c) {
+      return cleanStr(c).replace(/\s+/g, " ").toLowerCase();
+    }
+
+    function pickCol(cols, candidates) {
+      const map = new Map(cols.map(c => [normCol(c), c]));
+      for (const cand of candidates) {
+        const key = normCol(cand);
+        if (map.has(key)) return map.get(key);
+      }
+      // partial match fallback
+      const normCols = cols.map(c => ({raw:c, n:normCol(c)}));
+      for (const cand of candidates) {
+        const k = normCol(cand);
+        const found = normCols.find(x => x.n.includes(k));
+        if (found) return found.raw;
+      }
+      return null;
+    }
+
+    async function readXlsx(file, headerRow=1) {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const sheetName = wb.SheetNames[0];
+      const ws = wb.Sheets[sheetName];
+      // range: headerRow means skip rows before headerRow (0-based)
+      const rows = XLSX.utils.sheet_to_json(ws, { range: headerRow, defval: null });
+      return rows;
+    }
+
+    function toNumber(v) {
+      if (v == null) return 0;
+      if (typeof v === "number") return v;
+      const s = cleanStr(v).replace(/,/g, "");
+      const n = Number(s);
+      return Number.isFinite(n) ? n : 0;
+    }
+
+    function getMappings(sampleRow) {
+      const cols = Object.keys(sampleRow || {});
+      const dateCol = pickCol(cols, ["תאריך", "trx_date", "date", "תאריך עסקה", "תאריך_עסקה"]);
+      const barcodeCol = pickCol(cols, ["ברקוד", "קוד פריט", "מק\"ט", "מקט", "item_code", "barcode", "sku"]);
+      const itemNameCol = pickCol(cols, ["שם פריט", "תיאור", "תיאור פריט", "item_name", "שם מוצר", "שם_מוצר"]);
+      const deptNameCol = pickCol(cols, ["שם מחלקה", "מחלקה", "dept_name", "department"]);
+      const supplierNameCol = pickCol(cols, ["שם ספק", "ספק", "supplier_name", "SUPPLIER_NAME"]);
+      const qtyCol = pickCol(cols, ["כמות", "qty", "quantity"]);
+      const amountCol = pickCol(cols, ["סכום", "סה\"כ", "amount", "total", "sum", "עלות", "מחיר כולל"]);
+      return { dateCol, barcodeCol, itemNameCol, deptNameCol, supplierNameCol, qtyCol, amountCol };
+    }
+
+    function normalizeRows(rows, kind) {
+      if (!rows || !rows.length) return [];
+      const m = getMappings(rows[0]);
+      if (!m.dateCol || !m.barcodeCol) {
+        throw new Error(`${kind}: לא הצלחתי לזהות עמודות חובה (תאריך/ברקוד).`);
+      }
+      if (!m.amountCol) {
+        throw new Error(`${kind}: לא הצלחתי לזהות עמודת סכום.`);
+      }
+      return rows.map(r => {
+        const d = parseExcelDate(r[m.dateCol]);
+        const barcode = cleanStr(r[m.barcodeCol]).replace(/\.0$/, "");
+        return {
+          date: d,
+          month: d ? monthKey(d) : null,
+          barcode,
+          itemName: m.itemNameCol ? cleanStr(r[m.itemNameCol]) : "",
+          deptName: m.deptNameCol ? cleanStr(r[m.deptNameCol]) : "",
+          supplierName: m.supplierNameCol ? cleanStr(r[m.supplierNameCol]) : "",
+          qty: m.qtyCol ? toNumber(r[m.qtyCol]) : 0,
+          amount: toNumber(r[m.amountCol]),
+        };
+      }).filter(x => x.date && x.month && x.barcode);
+    }
+
+    function inRange(d, from, to) {
+      if (!d) return false;
+      if (from && d < from) return false;
+      if (to && d > to) return false;
+      return true;
+    }
+
+    function aggMonthlyTotals(sales, purchases, from, to) {
+      const salesByM = new Map();
+      const purByM = new Map();
+
+      for (const r of sales) {
+        if (!inRange(r.date, from, to)) continue;
+        const cur = salesByM.get(r.month) || { sales:0, qty:0 };
+        cur.sales += r.amount;
+        cur.qty += r.qty;
+        salesByM.set(r.month, cur);
+      }
+      for (const r of purchases) {
+        if (!inRange(r.date, from, to)) continue;
+        const cur = purByM.get(r.month) || { purchases:0, qty:0 };
+        cur.purchases += r.amount;
+        cur.qty += r.qty;
+        purByM.set(r.month, cur);
+      }
+
+      const months = Array.from(new Set([...salesByM.keys(), ...purByM.keys()])).sort();
+      const rows = months.map(m => {
+        const s = salesByM.get(m) || { sales:0, qty:0 };
+        const p = purByM.get(m) || { purchases:0, qty:0 };
+        const profit = s.sales - p.purchases;
+        const marginPct = s.sales !== 0 ? (profit / s.sales * 100) : null;
+        return { month:m, sales:s.sales, purchases:p.purchases, profit, marginPct };
+      });
+      return rows;
+    }
+
+    function aggProfitByDimPerMonth(sales, purchases, dimKey, topN, from, to) {
+      // sales: month+barcode -> (sales_amount, dim)
+      const salesItem = new Map(); // key=month|barcode -> { sales, dimVal }
+      for (const r of sales) {
+        if (!inRange(r.date, from, to)) continue;
+        const key = r.month + "|" + r.barcode;
+        const cur = salesItem.get(key) || { sales:0, dimVal:"" };
+        cur.sales += r.amount;
+        if (!cur.dimVal) cur.dimVal = cleanStr(r[dimKey] || "");
+        salesItem.set(key, cur);
+      }
+      // purchases: month+barcode -> purchases
+      const purItem = new Map();
+      for (const r of purchases) {
+        if (!inRange(r.date, from, to)) continue;
+        const key = r.month + "|" + r.barcode;
+        purItem.set(key, (purItem.get(key) || 0) + r.amount);
+      }
+
+      // profit rows by month, dim
+      const profitByMonthDim = new Map(); // key=month|dim -> profit
+      const dimTotals = new Map(); // dim -> abs(profit) total for ranking
+
+      for (const [k, s] of salesItem.entries()) {
+        const purchasesAmt = purItem.get(k) || 0;
+        const profit = s.sales - purchasesAmt;
+        const [month] = k.split("|");
+        const dimVal = s.dimVal || "לא מזוהה";
+        const key = month + "|" + dimVal;
+        profitByMonthDim.set(key, (profitByMonthDim.get(key) || 0) + profit);
+        dimTotals.set(dimVal, (dimTotals.get(dimVal) || 0) + Math.abs(profit));
+      }
+
+      const months = Array.from(new Set(Array.from(profitByMonthDim.keys()).map(k => k.split("|")[0]))).sort();
+      const dimsRanked = Array.from(dimTotals.entries())
+        .sort((a,b) => b[1]-a[1])
+        .map(([d]) => d);
+
+      const top = dimsRanked.slice(0, topN);
+      const other = "אחר";
+
+      const series = new Map();
+      for (const d of [...top, other]) series.set(d, months.map(() => 0));
+
+      for (const [k, v] of profitByMonthDim.entries()) {
+        const [month, dimVal] = k.split("|");
+        const idx = months.indexOf(month);
+        if (idx < 0) continue;
+        const targetDim = top.includes(dimVal) ? dimVal : other;
+        series.get(targetDim)[idx] += v;
+      }
+
+      return { months, series };
+    }
+
+    let chartMonthly, chartDept, chartSupplier;
+
+    function destroyCharts() {
+      for (const ch of [chartMonthly, chartDept, chartSupplier]) {
+        if (ch) ch.destroy();
+      }
+      chartMonthly = chartDept = chartSupplier = null;
+    }
+
+    function makeBar(ctx, labels, datasets, title) {
+      return new Chart(ctx, {
+        type: "bar",
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          locale: "he-IL",
+          plugins: {
+            legend: { position: "bottom" },
+            title: { display: true, text: title, color: "#111827", font: { size: 14, weight: "600" } },
+            tooltip: {
+              callbacks: {
+                label: (c) => {
+                  const v = c.parsed.y;
+                  return `${c.dataset.label}: ${fmtILS(v)}`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: { grid: { display: false } },
+            y: {
+              ticks: { callback: (v) => "₪" + Number(v).toLocaleString("he-IL") },
+              beginAtZero: true
+            }
+          }
+        }
+      });
+    }
+
+    function colorPalette(n) {
+      const base = [
+        BRAND, "#2f6f3f", "#3b8a4f", "#4aa45f", "#65b879",
+        "#0f766e", "#2563eb", "#7c3aed", "#db2777", "#f59e0b",
+        "#111827"
+      ];
+      const out = [];
+      for (let i=0;i<n;i++) out.push(base[i % base.length]);
+      return out;
+    }
+
+    function renderMetrics(monthlyRows, from, to) {
+      const totalSales = monthlyRows.reduce((a,r)=>a+r.sales,0);
+      const totalPurchases = monthlyRows.reduce((a,r)=>a+r.purchases,0);
+      const totalProfit = monthlyRows.reduce((a,r)=>a+r.profit,0);
+      const marginPct = totalSales !== 0 ? (totalProfit / totalSales * 100) : null;
+
+      const rangeText = (from || to)
+        ? `${from ? from.toISOString().slice(0,10) : "…" } → ${to ? to.toISOString().slice(0,10) : "…" }`
+        : "כל התקופה";
+
+      els.metrics.style.display = "grid";
+      els.metrics.innerHTML = `
+        <div class="metric"><div class="k">סה״כ מכר</div><div class="v">${fmtILS(totalSales)}</div><div class="note">${rangeText}</div></div>
+        <div class="metric"><div class="k">סה״כ רכש</div><div class="v">${fmtILS(totalPurchases)}</div><div class="note">${rangeText}</div></div>
+        <div class="metric"><div class="k">רווח גולמי</div><div class="v">${fmtILS(totalProfit)}</div><div class="note">מרג׳ין: <b>${fmtPct(marginPct)}</b></div></div>
+      `;
+    }
+
+    function renderCharts(salesRows, purchasesRows) {
+      const from = els.fromDate.value ? new Date(els.fromDate.value) : null;
+      const to = els.toDate.value ? new Date(els.toDate.value) : null;
+      const topN = Number(els.topN.value || "8");
+
+      const monthly = aggMonthlyTotals(salesRows, purchasesRows, from, to);
+      renderMetrics(monthly, from, to);
+
+      destroyCharts();
+
+      // 1) Monthly gross profit
+      chartMonthly = new Chart(document.getElementById("chartMonthly"), {
+        type: "bar",
+        data: {
+          labels: monthly.map(r => r.month),
+          datasets: [
+            { label: "מכר", data: monthly.map(r=>r.sales), backgroundColor: "rgba(26,74,46,0.25)", borderColor: BRAND, borderWidth: 1 },
+            { label: "רכש", data: monthly.map(r=>r.purchases), backgroundColor: "rgba(185,28,28,0.18)", borderColor: "rgba(185,28,28,0.8)", borderWidth: 1 },
+            { label: "רווח גולמי", data: monthly.map(r=>r.profit), backgroundColor: "rgba(26,74,46,0.85)" },
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          locale: "he-IL",
+          plugins: {
+            legend: { position: "bottom" },
+            title: { display: true, text: "רווח גולמי לפי חודש", color: "#111827", font: { size: 14, weight: "600" } },
+            tooltip: {
+              callbacks: {
+                afterBody: (items) => {
+                  const idx = items?.[0]?.dataIndex ?? -1;
+                  if (idx < 0) return "";
+                  const m = monthly[idx];
+                  return `מרג׳ין: ${fmtPct(m.marginPct)}`;
+                },
+                label: (c) => `${c.dataset.label}: ${fmtILS(c.parsed.y)}`
+              }
+            }
+          },
+          scales: {
+            x: { grid: { display: false } },
+            y: { ticks: { callback: (v)=>"₪"+Number(v).toLocaleString("he-IL") }, beginAtZero: true }
+          }
+        }
+      });
+
+      // 2) Profit by department per month
+      const deptAgg = aggProfitByDimPerMonth(salesRows, purchasesRows, "deptName", topN, from, to);
+      const deptDims = Array.from(deptAgg.series.keys());
+      const deptColors = colorPalette(deptDims.length);
+      chartDept = makeBar(
+        document.getElementById("chartDept"),
+        deptAgg.months,
+        deptDims.map((d, i) => ({ label: d, data: deptAgg.series.get(d), backgroundColor: deptColors[i], stack: "dept" })),
+        "רווח לפי מחלקה לפי חודש"
+      );
+      chartDept.options.scales.x.stacked = true;
+      chartDept.options.scales.y.stacked = true;
+      chartDept.update();
+
+      // 3) Profit by supplier per month
+      const supAgg = aggProfitByDimPerMonth(salesRows, purchasesRows, "supplierName", topN, from, to);
+      const supDims = Array.from(supAgg.series.keys());
+      const supColors = colorPalette(supDims.length);
+      chartSupplier = makeBar(
+        document.getElementById("chartSupplier"),
+        supAgg.months,
+        supDims.map((d, i) => ({ label: d, data: supAgg.series.get(d), backgroundColor: supColors[i], stack: "sup" })),
+        "רווח לפי ספק לפי חודש"
+      );
+      chartSupplier.options.scales.x.stacked = true;
+      chartSupplier.options.scales.y.stacked = true;
+      chartSupplier.update();
+    }
+
+    // Tabs
+    document.querySelectorAll(".tab").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
+        document.querySelectorAll(".tabpan").forEach(p=>p.classList.remove("active"));
+        btn.classList.add("active");
+        document.getElementById(btn.dataset.tab).classList.add("active");
+      });
+    });
+
+    els.resetBtn.addEventListener("click", () => {
+      els.salesFile.value = "";
+      els.purchasesFile.value = "";
+      els.fromDate.value = "";
+      els.toDate.value = "";
+      els.metrics.style.display = "none";
+      els.metrics.innerHTML = "";
+      setStatus("");
+      destroyCharts();
+    });
+
+    els.runBtn.addEventListener("click", async () => {
+      try {
+        setStatus("טוען קבצים…");
+        els.runBtn.disabled = true;
+
+        if (!els.salesFile.files?.[0]) throw new Error("בחר/י קובץ מכר.");
+        if (!els.purchasesFile.files?.[0]) throw new Error("בחר/י קובץ רכש.");
+
+        const salesRaw = await readXlsx(els.salesFile.files[0], 1);
+        const purRaw = await readXlsx(els.purchasesFile.files[0], 1);
+
+        const salesRows = normalizeRows(salesRaw, "מכר");
+        const purchasesRows = normalizeRows(purRaw, "רכש");
+
+        if (!salesRows.length) throw new Error("קובץ המכר נטען אבל אין בו שורות נתונים אחרי סינון.");
+        if (!purchasesRows.length) throw new Error("קובץ הרכש נטען אבל אין בו שורות נתונים אחרי סינון.");
+
+        // Auto-set date pickers to file ranges if empty
+        const minD = new Date(Math.min(...salesRows.map(r=>r.date.getTime()), ...purchasesRows.map(r=>r.date.getTime())));
+        const maxD = new Date(Math.max(...salesRows.map(r=>r.date.getTime()), ...purchasesRows.map(r=>r.date.getTime())));
+        if (!els.fromDate.value) els.fromDate.value = minD.toISOString().slice(0,10);
+        if (!els.toDate.value) els.toDate.value = maxD.toISOString().slice(0,10);
+
+        renderCharts(salesRows, purchasesRows);
+        setStatus(`הצלחה: מכר=${salesRows.length.toLocaleString("he-IL")} שורות, רכש=${purchasesRows.length.toLocaleString("he-IL")} שורות.`);
+      } catch (e) {
+        console.error(e);
+        setStatus(e?.message || String(e), "err");
+      } finally {
+        els.runBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
+
