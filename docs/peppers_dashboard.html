@@ -109,6 +109,19 @@
   }
   .chart-card h2 { font-size: 1.05rem; color: var(--green); margin-bottom: 18px; font-weight: 700; }
   .chart-wrap { position: relative; height: 340px; }
+  .chart-wrap-tall { position: relative; height: 480px; }
+
+  /* Annual summary table */
+  .summary-table { width: 100%; border-collapse: collapse; margin-top: 24px; font-size: .93rem; }
+  .summary-table th { background: var(--green); color: #fff; padding: 10px 14px; text-align: right; font-weight: 600; }
+  .summary-table td { padding: 10px 14px; border-bottom: 1px solid #e0e8e3; text-align: right; }
+  .summary-table tr:nth-child(even) td { background: var(--green-pale); }
+  .summary-table tr.total-row td { font-weight: 700; background: #d0eada; border-top: 2px solid var(--green); }
+  .summary-table .neg { color: #c0392b; }
+
+  /* Dept selector */
+  .dept-select { width: 100%; max-width: 400px; border: 1px solid #ccc; border-radius: 6px;
+    padding: 8px 12px; font-size: .95rem; font-family: inherit; direction: rtl; }
 </style>
 </head>
 <body>
@@ -123,6 +136,9 @@
   <button onclick="showView('purchase-monthly')">🛒 רכש חודשי</button>
   <button onclick="showView('gross-profit')">📈 רווח גולמי</button>
   <button onclick="showView('daily-sales')">📅 מכירות יומיות</button>
+  <button onclick="showView('supplier-monthly')">🏭 רכש לפי ספק</button>
+  <button onclick="showView('dept-products')">🗂️ מוצרים לפי מחלקה</button>
+  <button onclick="showView('annual-summary')">🗓️ ניתוח שנתי</button>
 </nav>
 
 <!-- ===== VIEW 1: MONTHLY SALES ===== -->
@@ -189,6 +205,55 @@
   </div>
 </div>
 
+<!-- ===== VIEW 5: SUPPLIER MONTHLY ===== -->
+<div id="supplier-monthly" class="view">
+  <div class="filters">
+    <label>חודש
+      <select id="sup-month">
+        <option value="2026-01">ינואר 2026</option>
+        <option value="2026-02">פברואר 2026</option>
+        <option value="2026-03">מרץ 2026</option>
+        <option value="2026-04" selected>אפריל 2026</option>
+        <option value="all">כל החודשים</option>
+      </select>
+    </label>
+    <button onclick="renderSupplierMonthly()">עדכן</button>
+  </div>
+  <div class="kpi-row" id="sup-kpis"></div>
+  <div class="chart-card">
+    <h2>רכש לפי ספק (₪) — Top 10 + אחר</h2>
+    <div class="chart-wrap"><canvas id="chartSupplier"></canvas></div>
+  </div>
+</div>
+
+<!-- ===== VIEW 6: DEPT PRODUCTS ===== -->
+<div id="dept-products" class="view">
+  <div class="filters" style="align-items:flex-start">
+    <label>מחלקה
+      <select id="dept-select" class="dept-select" onchange="renderDeptProducts()">
+      </select>
+    </label>
+  </div>
+  <div class="kpi-row" id="dept-kpis"></div>
+  <div class="chart-card">
+    <h2>Top 15 מוצרים לפי מחלקה (₪)</h2>
+    <div class="chart-wrap-tall"><canvas id="chartDept"></canvas></div>
+  </div>
+</div>
+
+<!-- ===== VIEW 7: ANNUAL SUMMARY ===== -->
+<div id="annual-summary" class="view">
+  <div class="kpi-row" id="ann-kpis"></div>
+  <div class="chart-card" style="margin-bottom:24px">
+    <h2>פדיון vs רכש — 2026 (₪)</h2>
+    <div class="chart-wrap"><canvas id="chartAnnual"></canvas></div>
+  </div>
+  <div class="chart-card">
+    <h2>טבלה חודשית</h2>
+    <table class="summary-table" id="annualTable"></table>
+  </div>
+</div>
+
 <script>
 // ──────────────────────────────────────────
 // RAW DATA
@@ -236,16 +301,20 @@ function filterMonths(from, to) {
   }).sort();
 }
 
+const ALL_VIEWS = ['sales-monthly','purchase-monthly','gross-profit','daily-sales','supplier-monthly','dept-products','annual-summary'];
 function showView(id) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
   document.getElementById(id).classList.add('active');
-  const idx = ['sales-monthly','purchase-monthly','gross-profit','daily-sales'].indexOf(id);
+  const idx = ALL_VIEWS.indexOf(id);
   document.querySelectorAll('nav button')[idx].classList.add('active');
-  if (id === 'sales-monthly') renderSalesMonthly();
+  if (id === 'sales-monthly')    renderSalesMonthly();
   if (id === 'purchase-monthly') renderPurchaseMonthly();
-  if (id === 'gross-profit') renderGrossProfit();
-  if (id === 'daily-sales') renderDailySales();
+  if (id === 'gross-profit')     renderGrossProfit();
+  if (id === 'daily-sales')      renderDailySales();
+  if (id === 'supplier-monthly') renderSupplierMonthly();
+  if (id === 'dept-products')    renderDeptProducts();
+  if (id === 'annual-summary')   renderAnnualSummary();
 }
 
 function kpiHtml(label, value, negative) {
@@ -448,6 +517,182 @@ document.getElementById('ds-month').addEventListener('change', function() {
 });
 
 // ──────────────────────────────────────────
+// VIEW 5 — SUPPLIER MONTHLY (stacked bar)
+// ──────────────────────────────────────────
+const SUP_COLORS = ['#1a4a2e','#2d7a4e','#4aad78','#f0a500','#e07800','#c0392b','#8e44ad','#2980b9','#16a085','#7f8c8d','#bdc3c7'];
+
+function renderSupplierMonthly() {
+  const selMonth = document.getElementById('sup-month').value;
+  const months = selMonth === 'all' ? Object.keys(SUPPLIER_DATA).sort() : [selMonth];
+  const allSuppliers = [...SUPPLIER_TOP10, 'אחר'];
+
+  // KPIs
+  let grandTotal = 0;
+  months.forEach(m => { Object.values(SUPPLIER_DATA[m]||{}).forEach(v => grandTotal += v); });
+  const topSup = allSuppliers.reduce((best, s) => {
+    const total = months.reduce((sum,m) => sum + (SUPPLIER_DATA[m]?.[s]||0), 0);
+    return total > (best.total||0) ? {name:s,total} : best;
+  }, {});
+  document.getElementById('sup-kpis').innerHTML =
+    kpiHtml('סה"כ רכש', fmt(grandTotal)) +
+    kpiHtml('ספק מוביל', topSup.name) +
+    kpiHtml('רכש ספק מוביל', fmt(topSup.total||0));
+
+  destroyChart('sup');
+  const ctx = document.getElementById('chartSupplier').getContext('2d');
+
+  if (selMonth === 'all') {
+    // Stacked bar — months on X, suppliers as datasets
+    charts['sup'] = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: months.map(m => MONTH_HE[m]||m),
+        datasets: allSuppliers.map((s,i) => ({
+          label: s,
+          data: months.map(m => SUPPLIER_DATA[m]?.[s]||0),
+          backgroundColor: SUP_COLORS[i % SUP_COLORS.length],
+          stack: 'stack',
+          borderRadius: 0,
+        }))
+      },
+      options: { ...chartOptions('₪', true), scales: {
+        x: { stacked: true, ticks: { font: { family:"'Segoe UI',Arial", size:12 }, color:'#444' }, grid:{display:false} },
+        y: { stacked: true, ticks: { font: { family:"'Segoe UI',Arial", size:12 }, color:'#444', callback: v=>'₪'+(v>=1000?(v/1000).toFixed(0)+'K':v) }, grid:{color:'#eee'} }
+      }}
+    });
+  } else {
+    // Single month: horizontal bar sorted by value
+    const m = months[0];
+    const entries = allSuppliers.map(s => ({s, v: SUPPLIER_DATA[m]?.[s]||0}))
+      .filter(e=>e.v>0).sort((a,b)=>b.v-a.v);
+    charts['sup'] = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: entries.map(e => e.s),
+        datasets: [{ label: 'רכש (₪)', data: entries.map(e=>e.v),
+          backgroundColor: entries.map((_,i)=>SUP_COLORS[i%SUP_COLORS.length]),
+          borderRadius: 5, borderSkipped: false }]
+      },
+      options: chartOptions('₪')
+    });
+  }
+}
+
+// ──────────────────────────────────────────
+// VIEW 6 — DEPT PRODUCTS (horizontal bar)
+// ──────────────────────────────────────────
+function populateDeptSelect() {
+  const sel = document.getElementById('dept-select');
+  sel.innerHTML = Object.keys(DEPT_DATA).map(d => `<option value="${d}">${d}</option>`).join('');
+}
+
+function renderDeptProducts() {
+  const dept = document.getElementById('dept-select').value;
+  const items = DEPT_DATA[dept] || [];
+  const total = items.reduce((s,x)=>s+x.a, 0);
+  const top = items[0] || {};
+  document.getElementById('dept-kpis').innerHTML =
+    kpiHtml('סה"כ מחלקה', fmt(total)) +
+    kpiHtml('מוצר מוביל', top.n ? top.n.slice(0,30) : '—') +
+    kpiHtml('מכירות מוביל', fmt(top.a||0));
+
+  destroyChart('dept');
+  const ctx = document.getElementById('chartDept').getContext('2d');
+  const labels = items.map(x => x.n.length > 28 ? x.n.slice(0,28)+'…' : x.n);
+  charts['dept'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'מכירות (₪)',
+        data: items.map(x=>x.a),
+        backgroundColor: items.map((_,i) => i===0 ? GREEN : (i<3 ? GREEN2 : '#4aad78')),
+        borderRadius: 4,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { rtl:true, callbacks: {
+          label: ctx => {
+            const item = items[ctx.dataIndex];
+            return ` ${fmt(item.a)}   (${item.q.toLocaleString('he-IL')} יח')`;
+          }
+        }}
+      },
+      scales: {
+        x: { ticks: { font:{family:"'Segoe UI',Arial",size:11}, color:'#444',
+              callback: v=>'₪'+(v>=1000?(v/1000).toFixed(0)+'K':v) }, grid:{color:'#eee'} },
+        y: { ticks: { font:{family:"'Segoe UI',Arial",size:11}, color:'#333' }, grid:{display:false} }
+      }
+    }
+  });
+}
+
+// ──────────────────────────────────────────
+// VIEW 7 — ANNUAL SUMMARY
+// ──────────────────────────────────────────
+function renderAnnualSummary() {
+  const months = Object.keys(MONTHLY_SALES).sort();
+  const totalS = months.reduce((s,m)=>s+MONTHLY_SALES[m],0);
+  const totalP = months.reduce((s,m)=>s+MONTHLY_PURCHASES[m],0);
+  const totalGP = totalS - totalP;
+  const gpPct = (totalGP/totalS*100).toFixed(1);
+
+  document.getElementById('ann-kpis').innerHTML =
+    kpiHtml('סה"כ פדיון 2026', fmt(totalS)) +
+    kpiHtml('סה"כ רכש 2026', fmt(totalP)) +
+    kpiHtml('רווח גולמי', fmt(totalGP), totalGP<0) +
+    kpiHtml('% רווח גולמי', gpPct+'%', totalGP<0);
+
+  // Line chart
+  destroyChart('ann');
+  const ctx = document.getElementById('chartAnnual').getContext('2d');
+  charts['ann'] = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: months.map(m => MONTH_HE[m]||m),
+      datasets: [
+        { label:'פדיון', data: months.map(m=>MONTHLY_SALES[m]),
+          borderColor:GREEN, backgroundColor:'rgba(26,74,46,.1)', borderWidth:3,
+          pointRadius:6, pointBackgroundColor:GREEN, tension:.3, fill:false },
+        { label:'רכש', data: months.map(m=>MONTHLY_PURCHASES[m]),
+          borderColor:AMBER, backgroundColor:'rgba(240,165,0,.1)', borderWidth:3,
+          pointRadius:6, pointBackgroundColor:AMBER, tension:.3, fill:false },
+      ]
+    },
+    options: chartOptions('₪', true)
+  });
+
+  // Table
+  const gpArr = months.map(m => MONTHLY_SALES[m]-MONTHLY_PURCHASES[m]);
+  const rows = months.map((m,i) => {
+    const s=MONTHLY_SALES[m], p=MONTHLY_PURCHASES[m], gp=gpArr[i], pct=(gp/s*100).toFixed(1);
+    return `<tr>
+      <td>${MONTH_HE[m]||m}</td>
+      <td>${fmt(s)}</td>
+      <td>${fmt(p)}</td>
+      <td class="${gp<0?'neg':''}">${fmt(gp)}</td>
+      <td class="${gp<0?'neg':''}">${pct}%</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('annualTable').innerHTML = `
+    <thead><tr><th>חודש</th><th>פדיון</th><th>רכש</th><th>רווח גולמי</th><th>% רווח</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr class="total-row">
+      <td>סה"כ</td>
+      <td>${fmt(totalS)}</td>
+      <td>${fmt(totalP)}</td>
+      <td class="${totalGP<0?'neg':''}">${fmt(totalGP)}</td>
+      <td class="${totalGP<0?'neg':''}">${gpPct}%</td>
+    </tr></tfoot>`;
+}
+
+// ──────────────────────────────────────────
 // CHART BASE OPTIONS
 // ──────────────────────────────────────────
 function chartOptions(unit, legend) {
@@ -483,11 +728,22 @@ function chartOptions(unit, legend) {
 }
 
 // ──────────────────────────────────────────
+// SUPPLIER DATA
+// ──────────────────────────────────────────
+const SUPPLIER_TOP10 = ["מרקט האלה כרכור","תנובה בע\"מ","שופרסל","פיליפ מוריס בעמ","שטראוס גרופ חלבי","גלוברנדס בעמ","ע.ס.נ. סחר בעמ","ציון תורג'מן בע\"מ","מאפיית אגמי בע\"מ","קופיקו יבוא שיווק והפצה בע\"מ"];
+const SUPPLIER_DATA = {"2026-01":{"מאפיית אגמי בע\"מ":13870.9,"שטראוס גרופ חלבי":8363.27,"תנובה בע\"מ":32048.69,"פיליפ מוריס בעמ":13166.5,"שופרסל":20084.91,"ציון תורג'מן בע\"מ":12479.01,"גלוברנדס בעמ":15367.88,"מרקט האלה כרכור":21909.63,"ע.ס.נ. סחר בעמ":2840.47,"אחר":106778.0},"2026-02":{"מאפיית אגמי בע\"מ":10937.48,"מרקט האלה כרכור":32461.45,"שטראוס גרופ חלבי":15103.94,"קופיקו יבוא שיווק והפצה בע\"מ":6686.58,"תנובה בע\"מ":38286.64,"פיליפ מוריס בעמ":17605.05,"שופרסל":34890.79,"גלוברנדס בעמ":15082.24,"ציון תורג'מן בע\"מ":16060.44,"ע.ס.נ. סחר בעמ":6164.15,"אחר":132952.09},"2026-03":{"פיליפ מוריס בעמ":20686.47,"גלוברנדס בעמ":19881.55,"שופרסל":33052.11,"מרקט האלה כרכור":43539.1,"תנובה בע\"מ":36472.6,"מאפיית אגמי בע\"מ":11375.56,"ע.ס.נ. סחר בעמ":34546.53,"שטראוס גרופ חלבי":17336.74,"קופיקו יבוא שיווק והפצה בע\"מ":20236.28,"ציון תורג'מן בע\"מ":12130.39,"אחר":169369.9},"2026-04":{"מאפיית אגמי בע\"מ":10275.25,"מרקט האלה כרכור":41720.44,"ציון תורג'מן בע\"מ":12153.66,"תנובה בע\"מ":25044.96,"גלוברנדס בעמ":12367.95,"ע.ס.נ. סחר בעמ":18885.89,"שטראוס גרופ חלבי":22657.1,"פיליפ מוריס בעמ":13800.65,"שופרסל":8049.7,"קופיקו יבוא שיווק והפצה בע\"מ":15258.94,"אחר":146542.46}};
+
+// ──────────────────────────────────────────
+// DEPT PRODUCTS DATA
+// ──────────────────────────────────────────
+const DEPT_DATA = {"עישון":[{"n":"באלי לבן 40 גרם","a":19968.46,"q":200},{"n":"מרלבורו גולד","a":16025.73,"q":431},{"n":"ווינסטון כחול בוקס","a":12030.41,"q":339},{"n":"ל.מ בלו","a":11201.3,"q":323},{"n":"באלי נטורל 40 גרם","a":11004.27,"q":111},{"n":"מרלבורו טאץ חדש","a":8731.86,"q":260},{"n":"נקסט פיין","a":8656.03,"q":275},{"n":"כאמל צהוב בוקס","a":8149.69,"q":242},{"n":"אמריקן ספיריט כחול טבק","a":8028.51,"q":97},{"n":"וינסטון קומפקט ברי","a":7172.76,"q":225},{"n":"נקסט אוריגינל","a":7086.06,"q":233},{"n":"וינסטון CODE","a":7027.28,"q":208},{"n":"טבק מניטו לבן, 30 גרם","a":6769.7,"q":94},{"n":"מרלבורו רד","a":6513.9,"q":175},{"n":"טבק וינסטון כחול","a":4437.41,"q":57}],"ירקות ופירות ללא מע\"מ":[{"n":"בננה","a":27916.03,"q":2158},{"n":"עגבניה","a":16185.36,"q":1399},{"n":"תות שדה","a":15378.62,"q":755},{"n":"אבוקדו הטינגר חלק","a":13197.54,"q":812},{"n":"מלפפון","a":13041.07,"q":1271},{"n":"שרי אשכולות","a":8631.12,"q":347},{"n":"פלפל אדום","a":6788.45,"q":573},{"n":"תפוח עץ פינק ליידי","a":6604.89,"q":332},{"n":"תפוח אדמה לבן","a":5261.32,"q":670},{"n":"קלמנטינה","a":5089.36,"q":516},{"n":"תפוז","a":4729.24,"q":533},{"n":"לימון","a":4444.88,"q":400},{"n":"בטטה","a":4347.8,"q":374},{"n":"בצל לבן","a":3980.99,"q":792},{"n":"תפוח גרנד סמיט","a":3775.74,"q":254}],"משקאות":[{"n":"משקה אורז ושקדים אורגני 1ליטר נטורפוד","a":12646.07,"q":1470},{"n":"הארק עלית 70 מל","a":9345.31,"q":157},{"n":"וודקה פינלנדיה 1 ליטר","a":6918.76,"q":91},{"n":"שישיית קורונה","a":6487.7,"q":254},{"n":"XL משקה אנרגיה","a":5427.29,"q":1379},{"n":"בירה סטלה ארטואה בקבוק, שישיה 6 * 330 מ\"ל","a":4621.15,"q":183},{"n":"6 נביעות 1.5 פיקדון","a":4503.51,"q":268},{"n":"גולדסטאר 330 מ\"ל שישייה","a":3962.9,"q":147},{"n":"שישייה היינקן 330 מ\"ל","a":3481.82,"q":96},{"n":"קוקה קולה בודד 1.5 ליטר +פיקדון","a":3331.31,"q":399},{"n":"מי עדן שישיה 1.5","a":2754.05,"q":181},{"n":"קוקה קולה זירו 1.5 ליטר","a":2673.49,"q":319},{"n":"קוקה קולה 1.5 ליטר פיקדון","a":2227.69,"q":264},{"n":"קוקה קולה זירו 1.5 ליטר פיקדון","a":2176.22,"q":258},{"n":"ארק בן דוד, 700 מ\"ל","a":1983.96,"q":40}],"חלב, ביצים , סלטים ומצונן - חלבי - חדש":[{"n":"חמאה 200 גרם תנובה","a":7482.14,"q":812},{"n":"קוטג תנובה גביע 250 גרם5%","a":6011.1,"q":948},{"n":"משקה שיבולת שועל תנובה","a":4411.68,"q":350},{"n":"קוטג' 9% שומן 250 גרם","a":3745.56,"q":591},{"n":"חלב בטעם של פעם 1 ליטר","a":3599.95,"q":448},{"n":"שמנת להקצפה 38% שומן","a":3491.51,"q":273},{"n":"דנונה פרו 20 גרם","a":3262.67,"q":513},{"n":"יוגורט יווני 1 קג","a":3256.25,"q":117},{"n":"עמק צהובה 400 גר","a":3157.21,"q":102},{"n":"דנונה ביו טבעי","a":3094.82,"q":747},{"n":"קוטג' 5% עם סידן 250 גרם","a":3066.72,"q":484},{"n":"שמנת מתוקה להקצפה 32%","a":2851.02,"q":355},{"n":"יוגורט יווני 400גר'","a":2824.53,"q":170},{"n":"צהובה עמק 9% 400 גרם","a":2722.46,"q":85},{"n":"גבינה צהובה גוש חלב 400 גרם","a":2583.39,"q":96}],"לחמים ומאפים":[{"n":"10 לחמניות שומשום אגמי","a":13623.92,"q":954},{"n":"8 פיתות אגמי","a":8863.1,"q":814},{"n":"פיתה ביס כוסמין מלא","a":5700.82,"q":357},{"n":"לחם מחמצת דגנים","a":3689.39,"q":147},{"n":"פיתה PRO כוסמין מלא מועש, 6 גרם","a":3447.54,"q":177},{"n":"לחם טוסט אמריקה","a":2237.66,"q":178},{"n":"לחמניות המבורגר, שישיה 6 * 600 גרם","a":2226.22,"q":147},{"n":"לחם מחמצת כוסמין טבעי","a":1918.38,"q":77},{"n":"בייגלה רומני אגמי","a":1905.87,"q":163},{"n":"לחמניות כוסמין אנשי הלחם","a":1821.39,"q":90},{"n":"לחם בריאות ושובע כוסמין","a":1649.35,"q":98},{"n":"חלה לשבת אנשי הלחם","a":1647.87,"q":116},{"n":"לחם דגנים קל מרובע חלי ממן","a":1647.85,"q":98},{"n":"לחם פרו דל פחמימות","a":1578.46,"q":75},{"n":"לחמניות חלה, 560 גרם","a":1537.01,"q":91}],"מוצרים בפיקוח - חדש":[{"n":"חלב תנובה 3% שומן קרטון 1 ליטר מהדרין","a":23661.76,"q":3845},{"n":"ביצים גדול L, 30 יחידות","a":16047.33,"q":534},{"n":"חלה רגילה עם שומשום אגמי, 500 גרם","a":4394.75,"q":787},{"n":"לחם אחיד פרוס, 750 גרם אגמי","a":3736.53,"q":530},{"n":"ביצי חופש בלאדי","a":1163.46,"q":42},{"n":"חלב תנובה 1%","a":1005.2,"q":173},{"n":"גבינה לבנה %5","a":731.28,"q":149},{"n":"גבינה לבנה 5% 250 גרם","a":608.54,"q":124},{"n":"אשל 4.5 % שומן 200 מ\"ל","a":400.58,"q":240},{"n":"שמנת להקצפה 38% (פ)","a":378.12,"q":59},{"n":"גיל 3% 200 מ\"ל","a":340.97,"q":229},{"n":"גבינה לבנה 5% 500 גרפם","a":303.97,"q":31},{"n":"גלבוע פרוסות גבינה חצי קשה 22%, 200 גרם","a":240.5,"q":18},{"n":"לחם אחיד פרוס 750 דוידוביץ","a":234.19,"q":33},{"n":"עמק פתיתים גבינה חצי קשה מגורדת 28%, 500 גרם","a":227.54,"q":6}],"בישול ואפייה":[{"n":"נס קפה טסטרצויס 200גר","a":3636.17,"q":120},{"n":"אוניגירי סנדוויץ' יפני","a":3149.06,"q":210},{"n":"קפה טורקי עלית, רביעיה 4 * 100 גרם","a":2968.83,"q":88},{"n":"ממרח אגוזי לוז עם קקאו, 750 גרם","a":2361.69,"q":92},{"n":"ממרח אגוזי לוז עם קקאו נוטלה, 400 גרם","a":1979.0,"q":98},{"n":"טסטר צ'ויס קפה נמס + ספל, 200 גרם","a":1929.68,"q":66},{"n":"שמן זית כתית FERNANDO, 750 מ\"ל","a":1745.15,"q":71},{"n":"שמן קנולה מזוכך, 1 ליטר","a":1609.4,"q":113},{"n":"שקדי מרק 400 גר","a":1515.94,"q":129},{"n":"אטריות להכנה מהירה בטעם עוף חריף קארבו, 130 גרם","a":1496.14,"q":137},{"n":"טורקי 15% תוספת, רביעיה 4 * 100 גרם","a":1493.81,"q":45},{"n":"קפה טורקי עלית 150 גרם","a":1490.24,"q":111},{"n":"נודלס ראמן בטעם עוף חריף","a":1439.49,"q":114},{"n":"ג'ייקובס קפה נמס אינטנס, 190 גרם","a":1383.63,"q":50},{"n":"סוכר לבן, 1 ק\"ג","a":1380.34,"q":274}],"חטיפים מלוחים ומתוקים":[{"n":"העוגיות של עופר","a":4161.73,"q":165},{"n":"במבה אסם 80 גר","a":2574.84,"q":558},{"n":"עוגיות בדלי, 500 גרם","a":2032.43,"q":161},{"n":"שוקולד מריר ורד הגליל, רביעיה 4 * 100 גרם","a":1938.27,"q":83},{"n":"שוקולד פרה מריר","a":1789.68,"q":243},{"n":"ביסקוויט פתיבר קלאסי, 500 גרם","a":1788.15,"q":142},{"n":"קינדר בואנו חלב","a":1703.87,"q":376},{"n":"ביצת קינדר ג'וי, 20 גרם","a":1482.39,"q":226},{"n":"קינדר בואנו לבן","a":1390.88,"q":306},{"n":"דר' פופקורן – Dr Popcoren 200g","a":1390.71,"q":128},{"n":"קינדר אצבעות 100 גרם","a":1384.84,"q":151},{"n":"חטיף אצות ים קלויות 40.5 גרם","a":1280.01,"q":46},{"n":"מיני קרקרים עגולים קואטרה, 350 גרם","a":1249.01,"q":131},{"n":"מאג 4 פרה מריר בד\"צ","a":1226.73,"q":45},{"n":"מואגדת שלשייה חלב כשלפ","a":1217.39,"q":68}],"ביצים":[{"n":"ביצים L תריסר","a":15446.76,"q":1287},{"n":"ביצים טריות 18 יח' גודל - L","a":8868.36,"q":493},{"n":"מגש 30 ביצים גודלL","a":422.35,"q":14},{"n":"ביצים לארג' 30 - מעודכן","a":331.68,"q":11},{"n":"ביצי חופש","a":93.39,"q":4},{"n":"ביצים 30 XL","a":63.72,"q":2},{"n":"ביצי חופש, 12 יחידות - מעודכן","a":21.95,"q":1},{"n":"ביצי משק 12יח'-L - מעודכן","a":12.06,"q":1},{"n":"ביצים M 12","a":10.93,"q":1}],"ניקיון":[{"n":"נייר טואלט סופט לבן 32 גלילים","a":4003.36,"q":132},{"n":"מגבות הפלא גליל כפול, 6 יחידות","a":1725.43,"q":76},{"n":"נייר טואלט מרקם ייחודי, 30 * 19.6 מטר לילי","a":1598.72,"q":48},{"n":"מגבת ניקול שישייה","a":1553.27,"q":137},{"n":"נייר טואלט לילי פסטל 32 י\"ח","a":1416.16,"q":39},{"n":"כביסכל - בייבי ביו 2 ליטר","a":1148.43,"q":33},{"n":"קפסולות הפלא למדיח, 42 יחידות","a":1060.07,"q":24},{"n":"סנו ז'אוול לימון 4 ליטר","a":899.82,"q":49},{"n":"ג'ל כביסה מיקס 3 ליטר","a":724.17,"q":25},{"n":"כביסכל רוז BIO, 2 ליטר","a":631.2,"q":18},{"n":"סבון כלים ספארק משאבה בריח לימון 1 ליטר","a":531.73,"q":47},{"n":"מיקרופייבר לרצפה 3 יחי SWIFT","a":512.57,"q":32},{"n":"א.קאלק מרסס כללי","a":504.85,"q":30},{"n":"סנו ספריי אקונומיקה","a":453.28,"q":27},{"n":"פרסיל ג'ל 2.5 ליטר קולור","a":447.0,"q":18}],"כללית":[{"n":"כללי","a":13938.34,"q":942},{"n":"משלוח במבצע","a":381.31,"q":15},{"n":"לחמניות של פסח","a":377.5,"q":76},{"n":"גרביים מודפסות","a":349.09,"q":23},{"n":"שקית גופיה","a":314.29,"q":3707},{"n":"קליק דגנים שוקולד","a":294.66,"q":41},{"n":"משקפיים לראייה / קריאה","a":252.12,"q":25},{"n":"גרביים עבות","a":147.68,"q":7},{"n":"עוגיות קוקוס כשל\"פ 500 גרם","a":140.96,"q":7},{"n":"מטריה 16 סיחים","a":105.93,"q":5}],"קפואים":[{"n":"סלמון נורווגי מעושן, 100 גרם","a":2255.71,"q":107},{"n":"פילה אמנון קפוא מהדרין","a":1698.57,"q":45},{"n":"חטיפי פיצה גבינה מעדנות, 650 גרם","a":1318.21,"q":46},{"n":"שניצל דק דק פריך, 700 גרם","a":1300.36,"q":31},{"n":"נקנקיות וינר 500 גרם","a":1219.88,"q":62},{"n":"המבורגר אנגוס 880ג חלק","a":1180.1,"q":20},{"n":"נתחי פילה סלמון קפוא, 600 גרם","a":966.92,"q":19},{"n":"אצבעות שומשום","a":958.85,"q":25},{"n":"שימרית שקית 50 גר","a":855.98,"q":198},{"n":"מעדנות מאמא מיה","a":829.4,"q":33},{"n":"שעועית שלמה 800 ג\"ר","a":781.67,"q":41},{"n":"פיצה מאמה מיה פיצה מרגריטה","a":766.78,"q":32},{"n":"תפוגן ציפב קריספי","a":744.9,"q":26},{"n":"שניצל ג'ונגל","a":720.3,"q":19},{"n":"שעועית עדינה שלמה, 600 גרם","a":697.88,"q":37}],"גלידות":[{"n":"פטל מצופה בשוקולד לבן ושוקולד חלב, 150 גרם","a":2744.47,"q":74},{"n":"פיינט וניל, 500 מ\"ל","a":1420.15,"q":61},{"n":"בן ג'ריס פיינט דולצ'ה דה לצ'ה 500 מ\"ל","a":1343.01,"q":58},{"n":"פטל מצופה בשוקולד לבן ושוקולד מריר, 150 גרם","a":1335.59,"q":36},{"n":"קוקילידה וניל, 80 גרם","a":1104.91,"q":94},{"n":"קרחון גומיגם ספארי עם סוכריות, 90 גרם","a":984.5,"q":131},{"n":"שלגון קראנץ ליבת נוגט שוקולד, 100 גרם","a":810.82,"q":69},{"n":"מגנום שקדים","a":635.16,"q":59},{"n":"שרביט אבטיח נסטלה","a":608.16,"q":91},{"n":"גלידת סנדוויץ אוראו, 80 גרם","a":589.66,"q":54},{"n":"פיינט קפה, 500 מ\"ל","a":587.76,"q":25},{"n":"גלידת חמאת בוטנים עם בראוניס ופירורי בייגל, 500 מ\"ל","a":565.73,"q":27},{"n":"קראנץ סנדוויץ וופל קרמל, 95 גרם","a":564.5,"q":48},{"n":"נסטלה קראנץ וניל","a":553.66,"q":47},{"n":"בן ג'ריס פיינט קרם עוגיות 500 מ\"ל","a":536.55,"q":23}],"מזון":[{"n":"טונה ס.ק רביעיות שמן צמחי","a":1553.56,"q":74},{"n":"עגבניות חתוכות דק, שלישיה 3 * 400 גרם","a":1447.95,"q":69},{"n":"קרונפלקס של אלופים","a":1385.19,"q":70},{"n":"עלי גפן ממולאים באורז, 400 גרם","a":1312.65,"q":106},{"n":"אורז בסמטי קלאסי, 1 ק\"ג","a":966.91,"q":64},{"n":"עוגת קראנץ חלווה","a":895.1,"q":72},{"n":"עוגיות מובחרות ללא סוכר","a":769.42,"q":72},{"n":"קינואה, 500 גרם","a":735.99,"q":47},{"n":"סוכר לבן צנצנת, 1 ק\"ג","a":622.4,"q":53},{"n":"פוסידון 110 גר רביעיות","a":595.94,"q":33}],"חד פעמי ומתכלה":[{"n":"מגבות הפלא 6 יח' סנו סושי","a":3100.28,"q":264},{"n":"נייר טואלט לב אדום 32 גלילים","a":2656.9,"q":96},{"n":"כפפות L 80 יחידות","a":847.9,"q":72},{"n":"נייר אפייה אור שני","a":733.75,"q":73},{"n":"פחמים גריל גריל","a":675.89,"q":29},{"n":"מיכל לכירת גז ניידת, 220 גרם","a":612.15,"q":41},{"n":"מגבונים לילי צבעוני, שלישיה 3 * 90 דפים","a":562.77,"q":53},{"n":"תבנית אלומניום ענק אלומי, 3 יחידות","a":531.51,"q":53},{"n":"פחם חום 2 ק\"ג","a":513.4,"q":36},{"n":"שקיות אשפה שרוך 52/65","a":430.07,"q":29}],"אחזקת הבית":[{"n":"דוייפאק כביסכל בייבי, 2 ליטר","a":1877.12,"q":81},{"n":"גלילי נייר טואלט מגה, 18 יחידות","a":1457.98,"q":48},{"n":"דוייפאק כביסכל ארומטי ביו, 2 ליטר","a":1385.26,"q":57},{"n":"דוייפאק כביסכל רוז, 2 ליטר","a":1269.8,"q":53},{"n":"דוייפאק כביסכל סופט קייר ביו, 2 ליטר","a":860.76,"q":35}],"קטניות ודגנים":[{"n":"כריות נוגט, 686 גרם","a":2850.16,"q":118},{"n":"אורז פרסי קלאסי, 1 ק\"ג","a":1323.86,"q":122},{"n":"אורז בסמטי 1 ק\"ג","a":1103.34,"q":86},{"n":"כריות נוגט, 348 גרם","a":667.82,"q":45},{"n":"שיבולת שועל, 500 גרם","a":642.71,"q":63}],"שימורים":[{"n":"רוטב עגבניות מרוכז, 100 גרם","a":1256.07,"q":766},{"n":"גרעיני תירס מתוק, 335 גרם","a":971.73,"q":172},{"n":"נתחי טונה בהירה בשמן זית, 135 גרם","a":946.17,"q":35},{"n":"רביעיית טונה במי מלח 160 גרם בקרטונית פתח קל","a":930.06,"q":45},{"n":"מארז תפוחונים 4 יחידות 38 גרם","a":786.66,"q":52}],"ירקות ופרות חייב מע\"מ":[{"n":"זריפה גרעיני חמניה 400 גר","a":1888.15,"q":90},{"n":"גרעיני חמניה chacheer","a":905.42,"q":84},{"n":"שיני שום מרינה","a":519.27,"q":58},{"n":"גרעיני דלעת זריפה, 250 גרם","a":485.37,"q":23},{"n":"סלק בוואקום מרינה","a":442.31,"q":53}],"היגיינה, טיפוח ותינוקות":[{"n":"מגבונים לחים לתינוק לעור רגיש ללא בישום, רביעיה","a":718.0,"q":46},{"n":"האגיס 5","a":437.57,"q":10},{"n":"משחת שיניים אוריגינל, 75 מ\"ל","a":424.71,"q":17},{"n":"לושן טישו שלוש שכבות, 75 יחידות","a":391.19,"q":31},{"n":"קונדומים דורקס, 10 יחידות","a":342.09,"q":9}],"אורגני ובריאות":[{"n":"מי קוקוס אורגני, 1 ליטר","a":894.52,"q":76},{"n":"טבעול פילה דג סלמון טבעוני, 448 גרם","a":811.51,"q":24},{"n":"פרוטאין מקס קרמל מלוח","a":340.94,"q":27},{"n":"חטיף חלבון בטעם קרם עוגיות וקרמל, 62 גרם","a":297.83,"q":23},{"n":"משקה מי קוקוס, 1 ליטר","a":279.5,"q":22}],"תרופות":[{"n":"אדויל 16 כדורים","a":1402.96,"q":43},{"n":"אוטריוין מדוד מבוגר","a":531.62,"q":17},{"n":"OTRIVIN MENTHOL אוטריוין מנטול GSL, 10 מ\"ל","a":471.34,"q":14},{"n":"סטרפטילז לימון","a":312.28,"q":11},{"n":"נורפן","a":245.9,"q":8}],"מזון בעלי חיים":[{"n":"מזון לחתול מיאו מיקס אינדור, 1.42 ק\"ג","a":405.76,"q":12},{"n":"פרמיו מזון יבש כלב ננסי 3 קג","a":365.27,"q":11},{"n":"מזון לחתלתול מיאו מיקס טנדרס סלמון ועוף, 1.42 ק\"ג","a":236.69,"q":7},{"n":"מזון מלא לחתוליםבטעמי עוף,הודו, סלמון ודגי אוקיינוס 1.43 ק\"ג","a":236.68,"q":7},{"n":"שימורי מזון לכלב עם עוף, 375 גרם","a":235.48,"q":46}],"מכשירי חשמל":[{"n":"אוזניות ארדפודס לבן","a":286.44,"q":2},{"n":"Apple 1 m USB Cable","a":286.23,"q":8},{"n":"מטען בית טייפ C","a":211.85,"q":5},{"n":"מטען PD טייפ C 220","a":203.4,"q":4},{"n":"אוזניות ארפורדס נוער","a":194.93,"q":2}]};
+
+// ──────────────────────────────────────────
 // INIT
 // ──────────────────────────────────────────
-// Set daily sales default to April
 document.getElementById('ds-from').value = '2026-04-01';
 document.getElementById('ds-to').value   = '2026-04-30';
+populateDeptSelect();
 renderSalesMonthly();
 </script>
 </body>
