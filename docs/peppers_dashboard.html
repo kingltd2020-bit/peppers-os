@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Peppers OS — דשבורד</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root { --green: #1a4a2e; --green-light: #2d7a4e; --green-pale: #e8f5ee; --accent: #f0a500; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6f4; color: #222; direction: rtl; }
+
+  header {
+    background: var(--green);
+    color: #fff;
+    padding: 18px 32px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  }
+  header h1 { font-size: 1.4rem; letter-spacing: .5px; }
+  header span.logo { font-size: 1.8rem; }
+
+  nav {
+    background: #fff;
+    border-bottom: 3px solid var(--green);
+    display: flex;
+    gap: 0;
+    padding: 0 24px;
+  }
+  nav button {
+    background: none;
+    border: none;
+    padding: 14px 22px;
+    font-size: .97rem;
+    font-family: inherit;
+    cursor: pointer;
+    color: #555;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -3px;
+    transition: color .15s, border-color .15s;
+    font-weight: 500;
+  }
+  nav button.active { color: var(--green); border-bottom-color: var(--green); font-weight: 700; }
+  nav button:hover:not(.active) { color: var(--green-light); }
+
+  .view { display: none; padding: 28px 32px; }
+  .view.active { display: block; }
+
+  .filters {
+    background: #fff;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 22px;
+    display: flex;
+    gap: 24px;
+    align-items: center;
+    flex-wrap: wrap;
+    box-shadow: 0 1px 4px rgba(0,0,0,.07);
+  }
+  .filters label { font-size: .88rem; color: #555; display: flex; flex-direction: column; gap: 4px; }
+  .filters input[type=date], .filters select {
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: .9rem;
+    font-family: inherit;
+    direction: rtl;
+  }
+  .filters button {
+    background: var(--green);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 20px;
+    font-size: .9rem;
+    font-family: inherit;
+    cursor: pointer;
+    margin-top: 18px;
+    transition: background .15s;
+  }
+  .filters button:hover { background: var(--green-light); }
+
+  .kpi-row {
+    display: flex;
+    gap: 18px;
+    margin-bottom: 22px;
+    flex-wrap: wrap;
+  }
+  .kpi {
+    background: #fff;
+    border-radius: 10px;
+    padding: 18px 24px;
+    flex: 1;
+    min-width: 160px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.07);
+    border-right: 4px solid var(--green);
+  }
+  .kpi .label { font-size: .82rem; color: #777; margin-bottom: 6px; }
+  .kpi .value { font-size: 1.55rem; font-weight: 700; color: var(--green); }
+  .kpi .value.negative { color: #c0392b; }
+
+  .chart-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 1px 6px rgba(0,0,0,.08);
+  }
+  .chart-card h2 { font-size: 1.05rem; color: var(--green); margin-bottom: 18px; font-weight: 700; }
+  .chart-wrap { position: relative; height: 340px; }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="logo">🌶️</span>
+  <h1>Peppers OS — דשבורד ניהולי 2026</h1>
+</header>
+
+<nav>
+  <button class="active" onclick="showView('sales-monthly')">📊 פדיון חודשי</button>
+  <button onclick="showView('purchase-monthly')">🛒 רכש חודשי</button>
+  <button onclick="showView('gross-profit')">📈 רווח גולמי</button>
+  <button onclick="showView('daily-sales')">📅 מכירות יומיות</button>
+</nav>
+
+<!-- ===== VIEW 1: MONTHLY SALES ===== -->
+<div id="sales-monthly" class="view active">
+  <div class="filters">
+    <label>מ-תאריך<input type="date" id="sm-from" value="2026-01-01"></label>
+    <label>עד-תאריך<input type="date" id="sm-to" value="2026-04-30"></label>
+    <button onclick="renderSalesMonthly()">עדכן</button>
+  </div>
+  <div class="kpi-row" id="sm-kpis"></div>
+  <div class="chart-card">
+    <h2>פדיון חודשי — סה"כ מכירות (₪)</h2>
+    <div class="chart-wrap"><canvas id="chartSalesMonthly"></canvas></div>
+  </div>
+</div>
+
+<!-- ===== VIEW 2: MONTHLY PURCHASES ===== -->
+<div id="purchase-monthly" class="view">
+  <div class="filters">
+    <label>מ-תאריך<input type="date" id="pm-from" value="2026-01-01"></label>
+    <label>עד-תאריך<input type="date" id="pm-to" value="2026-04-30"></label>
+    <button onclick="renderPurchaseMonthly()">עדכן</button>
+  </div>
+  <div class="kpi-row" id="pm-kpis"></div>
+  <div class="chart-card">
+    <h2>רכש חודשי — סה"כ קניות (₪)</h2>
+    <div class="chart-wrap"><canvas id="chartPurchaseMonthly"></canvas></div>
+  </div>
+</div>
+
+<!-- ===== VIEW 3: GROSS PROFIT ===== -->
+<div id="gross-profit" class="view">
+  <div class="filters">
+    <label>מ-תאריך<input type="date" id="gp-from" value="2026-01-01"></label>
+    <label>עד-תאריך<input type="date" id="gp-to" value="2026-04-30"></label>
+    <button onclick="renderGrossProfit()">עדכן</button>
+  </div>
+  <div class="kpi-row" id="gp-kpis"></div>
+  <div class="chart-card">
+    <h2>רווח גולמי חודשי — פדיון מינוס רכש (₪)</h2>
+    <div class="chart-wrap"><canvas id="chartGrossProfit"></canvas></div>
+  </div>
+</div>
+
+<!-- ===== VIEW 4: DAILY SALES ===== -->
+<div id="daily-sales" class="view">
+  <div class="filters">
+    <label>חודש
+      <select id="ds-month">
+        <option value="2026-01">ינואר 2026</option>
+        <option value="2026-02">פברואר 2026</option>
+        <option value="2026-03">מרץ 2026</option>
+        <option value="2026-04" selected>אפריל 2026</option>
+      </select>
+    </label>
+    <label>מ-תאריך<input type="date" id="ds-from"></label>
+    <label>עד-תאריך<input type="date" id="ds-to"></label>
+    <button onclick="renderDailySales()">עדכן</button>
+  </div>
+  <div class="kpi-row" id="ds-kpis"></div>
+  <div class="chart-card">
+    <h2>מכירות יומיות (₪)</h2>
+    <div class="chart-wrap"><canvas id="chartDailySales"></canvas></div>
+  </div>
+</div>
+
+<script>
+// ──────────────────────────────────────────
+// RAW DATA
+// ──────────────────────────────────────────
+const MONTHLY_SALES = {
+  "2026-01": 408615.60,
+  "2026-02": 400518.82,
+  "2026-03": 492655.65,
+  "2026-04": 423738.61
+};
+
+const MONTHLY_PURCHASES = {
+  "2026-01": 246909.26,
+  "2026-02": 326230.85,
+  "2026-03": 418627.23,
+  "2026-04": 326757.00
+};
+
+const DAILY_SALES = {"2026-01-01":13193.41,"2026-01-02":17368.26,"2026-01-03":4910.47,"2026-01-04":13854.75,"2026-01-05":12375.65,"2026-01-06":13178.6,"2026-01-07":11275.19,"2026-01-08":15443.47,"2026-01-09":15803.18,"2026-01-10":5398.56,"2026-01-11":13646.12,"2026-01-12":14107.58,"2026-01-13":11908.05,"2026-01-14":12946.97,"2026-01-15":13167.25,"2026-01-16":19136.65,"2026-01-17":4107.89,"2026-01-18":16815.46,"2026-01-19":13243.38,"2026-01-20":14375.55,"2026-01-21":13120.13,"2026-01-22":16872.78,"2026-01-23":18614.67,"2026-01-24":4438.13,"2026-01-25":15354.47,"2026-01-26":13387.3,"2026-01-27":13737.27,"2026-01-28":16428.83,"2026-01-29":16476.03,"2026-01-30":19293.26,"2026-01-31":4636.29,"2026-02-01":17024.97,"2026-02-02":13806.11,"2026-02-03":14936.5,"2026-02-04":12841.31,"2026-02-05":16981.78,"2026-02-06":16453.18,"2026-02-07":5612.62,"2026-02-08":16524.68,"2026-02-09":11577.2,"2026-02-10":14201.99,"2026-02-11":13356.58,"2026-02-12":19087.84,"2026-02-13":20916.97,"2026-02-14":5169.73,"2026-02-15":16072.37,"2026-02-16":14336.55,"2026-02-17":12681.94,"2026-02-18":14015.8,"2026-02-19":18677.02,"2026-02-20":19481.78,"2026-02-21":3505.03,"2026-02-22":15006.79,"2026-02-23":14007.89,"2026-02-24":14969.18,"2026-02-25":14238.58,"2026-02-26":17277.26,"2026-02-27":18994.52,"2026-02-28":8762.67,"2026-03-01":22051.53,"2026-03-02":19175.79,"2026-03-03":16545.81,"2026-03-04":15358.03,"2026-03-05":19414.04,"2026-03-06":21479.07,"2026-03-07":3568.17,"2026-03-08":16328.92,"2026-03-09":18186.92,"2026-03-10":15441.75,"2026-03-11":14952.57,"2026-03-12":17846.07,"2026-03-13":23602.77,"2026-03-14":4137.0,"2026-03-15":17237.89,"2026-03-16":14932.66,"2026-03-17":14572.94,"2026-03-18":13864.1,"2026-03-19":18182.07,"2026-03-20":21914.98,"2026-03-21":2381.68,"2026-03-22":17521.24,"2026-03-23":14761.77,"2026-03-24":15110.73,"2026-03-25":12601.16,"2026-03-26":19974.97,"2026-03-27":22344.01,"2026-03-28":4031.36,"2026-03-29":15820.75,"2026-03-30":14649.12,"2026-03-31":24665.79,"2026-04-01":21589.15,"2026-04-02":3316.51,"2026-04-03":21547.14,"2026-04-04":4457.31,"2026-04-05":19791.82,"2026-04-06":21109.35,"2026-04-07":17707.97,"2026-04-08":5008.27,"2026-04-09":17796.32,"2026-04-10":21574.4,"2026-04-11":3950.43,"2026-04-12":16729.53,"2026-04-13":14757.9,"2026-04-14":16126.1,"2026-04-15":15625.56,"2026-04-16":17023.16,"2026-04-17":17677.01,"2026-04-18":3755.27,"2026-04-19":17191.87,"2026-04-20":12071.91,"2026-04-21":25553.56,"2026-04-22":18524.97,"2026-04-23":16702.62,"2026-04-24":20196.68,"2026-04-25":4110.02,"2026-04-26":17059.48,"2026-04-27":12519.37,"2026-04-28":12931.77,"2026-04-29":7333.15};
+
+const MONTH_HE = {
+  "2026-01": "ינואר 2026", "2026-02": "פברואר 2026",
+  "2026-03": "מרץ 2026",   "2026-04": "אפריל 2026"
+};
+
+// ──────────────────────────────────────────
+// HELPERS
+// ──────────────────────────────────────────
+const fmt = v => '₪' + Math.round(v).toLocaleString('he-IL');
+const GREEN = '#1a4a2e';
+const GREEN2 = '#2d7a4e';
+const AMBER = '#f0a500';
+const RED   = '#c0392b';
+
+let charts = {};
+
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+function filterMonths(from, to) {
+  return Object.keys(MONTHLY_SALES).filter(m => {
+    const d = m + '-01';
+    return d >= from && d <= to;
+  }).sort();
+}
+
+function showView(id) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  const idx = ['sales-monthly','purchase-monthly','gross-profit','daily-sales'].indexOf(id);
+  document.querySelectorAll('nav button')[idx].classList.add('active');
+  if (id === 'sales-monthly') renderSalesMonthly();
+  if (id === 'purchase-monthly') renderPurchaseMonthly();
+  if (id === 'gross-profit') renderGrossProfit();
+  if (id === 'daily-sales') renderDailySales();
+}
+
+function kpiHtml(label, value, negative) {
+  return `<div class="kpi"><div class="label">${label}</div><div class="value${negative?' negative':''}">${value}</div></div>`;
+}
+
+// ──────────────────────────────────────────
+// VIEW 1 — MONTHLY SALES
+// ──────────────────────────────────────────
+function renderSalesMonthly() {
+  const from = document.getElementById('sm-from').value;
+  const to   = document.getElementById('sm-to').value;
+  const months = filterMonths(from, to);
+  const vals = months.map(m => MONTHLY_SALES[m] || 0);
+  const total = vals.reduce((a,b)=>a+b,0);
+  const avg   = vals.length ? total/vals.length : 0;
+  const max   = Math.max(...vals);
+
+  document.getElementById('sm-kpis').innerHTML =
+    kpiHtml('סה"כ פדיון', fmt(total)) +
+    kpiHtml('ממוצע חודשי', fmt(avg)) +
+    kpiHtml('חודש שיא', fmt(max));
+
+  destroyChart('sm');
+  const ctx = document.getElementById('chartSalesMonthly').getContext('2d');
+  charts['sm'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: months.map(m => MONTH_HE[m] || m),
+      datasets: [{
+        label: 'פדיון (₪)',
+        data: vals,
+        backgroundColor: GREEN,
+        borderRadius: 6,
+        borderSkipped: false,
+      }]
+    },
+    options: chartOptions('₪')
+  });
+}
+
+// ──────────────────────────────────────────
+// VIEW 2 — MONTHLY PURCHASES
+// ──────────────────────────────────────────
+function renderPurchaseMonthly() {
+  const from = document.getElementById('pm-from').value;
+  const to   = document.getElementById('pm-to').value;
+  const months = filterMonths(from, to);
+  const vals = months.map(m => MONTHLY_PURCHASES[m] || 0);
+  const total = vals.reduce((a,b)=>a+b,0);
+  const avg   = vals.length ? total/vals.length : 0;
+  const max   = Math.max(...vals);
+
+  document.getElementById('pm-kpis').innerHTML =
+    kpiHtml('סה"כ רכש', fmt(total)) +
+    kpiHtml('ממוצע חודשי', fmt(avg)) +
+    kpiHtml('חודש שיא', fmt(max));
+
+  destroyChart('pm');
+  const ctx = document.getElementById('chartPurchaseMonthly').getContext('2d');
+  charts['pm'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: months.map(m => MONTH_HE[m] || m),
+      datasets: [{
+        label: 'רכש (₪)',
+        data: vals,
+        backgroundColor: AMBER,
+        borderRadius: 6,
+        borderSkipped: false,
+      }]
+    },
+    options: chartOptions('₪')
+  });
+}
+
+// ──────────────────────────────────────────
+// VIEW 3 — GROSS PROFIT
+// ──────────────────────────────────────────
+function renderGrossProfit() {
+  const from = document.getElementById('gp-from').value;
+  const to   = document.getElementById('gp-to').value;
+  const months = filterMonths(from, to);
+  const salesVals = months.map(m => MONTHLY_SALES[m] || 0);
+  const purchVals = months.map(m => MONTHLY_PURCHASES[m] || 0);
+  const gpVals    = months.map((m,i) => salesVals[i] - purchVals[i]);
+  const totalSales = salesVals.reduce((a,b)=>a+b,0);
+  const totalPurch = purchVals.reduce((a,b)=>a+b,0);
+  const totalGP    = totalSales - totalPurch;
+  const gpPct      = totalSales ? (totalGP/totalSales*100).toFixed(1) : 0;
+
+  document.getElementById('gp-kpis').innerHTML =
+    kpiHtml('סה"כ פדיון', fmt(totalSales)) +
+    kpiHtml('סה"כ רכש', fmt(totalPurch)) +
+    kpiHtml('רווח גולמי', fmt(totalGP), totalGP < 0) +
+    kpiHtml('% רווח גולמי', gpPct + '%', totalGP < 0);
+
+  destroyChart('gp');
+  const ctx = document.getElementById('chartGrossProfit').getContext('2d');
+  charts['gp'] = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: months.map(m => MONTH_HE[m] || m),
+      datasets: [
+        {
+          label: 'פדיון (₪)',
+          data: salesVals,
+          borderColor: GREEN,
+          backgroundColor: 'rgba(26,74,46,.12)',
+          borderWidth: 2.5,
+          pointRadius: 5,
+          pointBackgroundColor: GREEN,
+          tension: 0.3,
+          fill: false,
+        },
+        {
+          label: 'רכש (₪)',
+          data: purchVals,
+          borderColor: AMBER,
+          backgroundColor: 'rgba(240,165,0,.1)',
+          borderWidth: 2.5,
+          pointRadius: 5,
+          pointBackgroundColor: AMBER,
+          tension: 0.3,
+          fill: false,
+        },
+        {
+          label: 'רווח גולמי (₪)',
+          data: gpVals,
+          borderColor: RED,
+          backgroundColor: 'rgba(192,57,43,.1)',
+          borderWidth: 2.5,
+          pointRadius: 5,
+          pointBackgroundColor: RED,
+          tension: 0.3,
+          fill: false,
+          borderDash: [6,3],
+        }
+      ]
+    },
+    options: chartOptions('₪', true)
+  });
+}
+
+// ──────────────────────────────────────────
+// VIEW 4 — DAILY SALES
+// ──────────────────────────────────────────
+function renderDailySales() {
+  const selMonth = document.getElementById('ds-month').value;
+  let from = document.getElementById('ds-from').value;
+  let to   = document.getElementById('ds-to').value;
+
+  // If from/to are empty, default to selected month
+  if (!from) from = selMonth + '-01';
+  if (!to) {
+    const lastDay = new Date(parseInt(selMonth.split('-')[0]), parseInt(selMonth.split('-')[1]), 0).getDate();
+    to = selMonth + '-' + String(lastDay).padStart(2,'0');
+  }
+  document.getElementById('ds-from').value = from;
+  document.getElementById('ds-to').value   = to;
+
+  const days = Object.keys(DAILY_SALES).filter(d => d >= from && d <= to).sort();
+  const vals = days.map(d => DAILY_SALES[d] || 0);
+  const total = vals.reduce((a,b)=>a+b,0);
+  const avg   = vals.length ? total/vals.length : 0;
+  const max   = Math.max(...vals);
+  const maxDay = days[vals.indexOf(max)];
+
+  document.getElementById('ds-kpis').innerHTML =
+    kpiHtml('סה"כ מכירות', fmt(total)) +
+    kpiHtml('ממוצע יומי', fmt(avg)) +
+    kpiHtml('יום שיא', (maxDay ? maxDay.slice(8) + '/' + maxDay.slice(5,7) : '—') + ' • ' + fmt(max));
+
+  destroyChart('ds');
+  const ctx = document.getElementById('chartDailySales').getContext('2d');
+  const colors = vals.map(v => v < 8000 ? '#c0392b' : GREEN);
+  charts['ds'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: days.map(d => d.slice(8) + '/' + d.slice(5,7)),
+      datasets: [{
+        label: 'מכירות (₪)',
+        data: vals,
+        backgroundColor: colors,
+        borderRadius: 4,
+        borderSkipped: false,
+      }]
+    },
+    options: chartOptions('₪')
+  });
+}
+
+// Sync month selector → date inputs
+document.getElementById('ds-month').addEventListener('change', function() {
+  const m = this.value;
+  const lastDay = new Date(parseInt(m.split('-')[0]), parseInt(m.split('-')[1]), 0).getDate();
+  document.getElementById('ds-from').value = m + '-01';
+  document.getElementById('ds-to').value   = m + '-' + String(lastDay).padStart(2,'0');
+  renderDailySales();
+});
+
+// ──────────────────────────────────────────
+// CHART BASE OPTIONS
+// ──────────────────────────────────────────
+function chartOptions(unit, legend) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: !!legend, position: 'top', rtl: true,
+        labels: { font: { family: "'Segoe UI', Arial", size: 13 }, color: '#333' }
+      },
+      tooltip: {
+        rtl: true,
+        callbacks: {
+          label: ctx => ' ' + fmt(ctx.parsed.y)
+        }
+      }
+    },
+    scales: {
+      x: {
+        ticks: { font: { family: "'Segoe UI', Arial", size: 12 }, color: '#444' },
+        grid: { display: false }
+      },
+      y: {
+        ticks: {
+          font: { family: "'Segoe UI', Arial", size: 12 },
+          color: '#444',
+          callback: v => '₪' + (v >= 1000 ? (v/1000).toFixed(0)+'K' : v)
+        },
+        grid: { color: '#eee' }
+      }
+    }
+  };
+}
+
+// ──────────────────────────────────────────
+// INIT
+// ──────────────────────────────────────────
+// Set daily sales default to April
+document.getElementById('ds-from').value = '2026-04-01';
+document.getElementById('ds-to').value   = '2026-04-30';
+renderSalesMonthly();
+</script>
+</body>
+</html>
