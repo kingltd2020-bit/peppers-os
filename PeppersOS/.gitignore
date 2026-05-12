@@ -1,0 +1,42 @@
+# Secrets & credentials — NEVER commit
+credentials.json
+token.json
+*.env
+.env*
+secrets/
+credentials/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Output / logs / state
+agents/invoice_agent/output/
+agents/invoice_agent/state/
+agents/invoice_agent/backfill/
+tools/classifier_dry_run.csv
+tools/classifier_execute_log.csv
+tools/invoice_namer_dry_run.csv
+tools/invoice_namer_log.csv
+image_report.csv
+migration_log.txt
+drive_tree.txt
+audit_report.md
+
+# Misc
+*.pyc
+.DS_Store
+Thumbs.db
+*.bak
