@@ -1,138 +1,145 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { AppShell, PhoneHeader, PhoneTabs, SoftChip } from "@/components/peppers/AppShell";
-import { Search, ShoppingBag, AlertTriangle, Receipt as ReceiptIcon, Box, ChevronLeft } from "lucide-react";
+import { AppShell, PhoneHeader, PhoneTabs } from "@/components/peppers/AppShell";
+import { Search, Receipt as ReceiptIcon, ChevronLeft } from "lucide-react";
 import { fetchInvoices } from "@/lib/peppers-api";
 
 export const Route = createFileRoute("/invoices")({
   head: () => ({
     meta: [
-      { title: "חשבוניות · Peppers OS" },
-      { name: "description", content: "מסמכים ורשימת חשבוניות עם סטטוסים מהשטח" },
-      { property: "og:title", content: "חשבוניות · Peppers OS" },
-      { property: "og:description", content: "ניהול חשבוניות ספקים וסנכרון ל-Comax" },
+      { title: "חשבוניות — Peppers OS" },
+      { name: "description", content: "רשימת חשבוניות ספקים" },
     ],
   }),
   component: InvoicesPage,
 });
 
 type Row = {
-  doc_id: string;
-  supplier_name: string;
+  invoice_id: string;
   supplier_id: string;
-  document_date: string;
-  amount_total: string;
-  document_type: string;
-  drive_url: string;
-  file_name: string;
+  supplier_name: string;
+  invoice_number: string;
+  invoice_date: string;
+  amount: string;
+  invoice_pdf: string;
+  created_at: string;
 };
-
-const DOC_TYPE_LABELS: Record<string, { label: string; variant: "primary" | "warning" | "danger" | "neutral" }> = {
-  supplier_invoice:    { label: "חשבונית ספק",    variant: "warning" },
-  delivery_note:       { label: "תעודת משלוח",    variant: "neutral" },
-  credit_note:         { label: "זיכוי",           variant: "primary" },
-  correction_invoice:  { label: "חשבונית תיקון",  variant: "warning" },
-  service_invoice:     { label: "חשבונית שירות",  variant: "neutral" },
-  outgoing_invoice:    { label: "חשבונית יוצאת",  variant: "primary" },
-  unknown:             { label: "לא מסווג",        variant: "danger"  },
-};
-
-function docTypeChip(docType: string) {
-  const meta = DOC_TYPE_LABELS[docType] ?? { label: docType || "—", variant: "neutral" as const };
-  return <SoftChip variant={meta.variant}>{meta.label}</SoftChip>;
-}
-
-function rowIcon(docType: string) {
-  if (docType === "unknown")
-    return (
-      <div className="grid size-9 place-items-center rounded-lg bg-destructive-soft text-destructive">
-        <AlertTriangle className="size-4" />
-      </div>
-    );
-  return (
-    <div className="grid size-9 place-items-center rounded-lg bg-primary-soft text-primary">
-      <ReceiptIcon className="size-4" />
-    </div>
-  );
-}
 
 function InvoicesPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchInvoices()
       .then((data) => setRows(data))
+      .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
 
-  return (
-    <AppShell title="חשבוניות" subtitle="מסמכים · רשימת ספקים" phone>
-      <PhoneHeader title="פלפלים" trailing={<Search className="size-4" />} />
+  // Running total — current month
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const thisMonthRows = rows.filter(
+    (r) => r.invoice_date && String(r.invoice_date).startsWith(currentMonth)
+  );
+  const monthTotal = thisMonthRows.reduce(
+    (sum, r) => sum + (parseFloat(r.amount) || 0),
+    0
+  );
+  const formattedTotal = monthTotal.toLocaleString("he-IL", {
+    style: "currency",
+    currency: "ILS",
+    maximumFractionDigits: 0,
+  });
 
-      <div className="px-5 pb-3">
-        <div className="text-center">
-          <div className="text-xs text-muted-foreground">רשימה / מסמכים</div>
-          <div className="mt-2 inline-flex items-center gap-3 rounded-xl bg-surface-2 px-4 py-2 text-xs">
-            <div className="text-foreground/80">
-              <span className="font-bold">12</span> פתוחות
-            </div>
+  return (
+    <AppShell title="חשבוניות" subtitle="רשימת חשבוניות ספקים" phone>
+      <PhoneHeader title="חשבוניות" trailing={<Search className="size-4" />} />
+
+      {/* ── Monthly Counter ── */}
+      <div className="px-5 pb-4 pt-2">
+        <div className="rounded-2xl bg-primary/10 border border-primary/20 p-4 text-center">
+          <div className="text-xs text-muted-foreground mb-1">רכש החודש הנוכחי</div>
+          <div className="text-3xl font-bold text-primary tabular-nums">{formattedTotal}</div>
+          <div className="mt-2 flex items-center justify-center gap-3 text-xs text-muted-foreground">
+            <span><span className="font-semibold text-foreground">{thisMonthRows.length}</span> חשבוניות החודש</span>
             <span className="h-3 w-px bg-border" />
-            <div className="text-foreground/80">
-              <span className="font-bold">124</span> סה״כ
-            </div>
+            <span><span className="font-semibold text-foreground">{rows.length}</span> סה"כ</span>
           </div>
         </div>
       </div>
 
+      {/* ── States ── */}
       {loading && (
-        <div className="px-5 py-8 text-center text-sm text-muted-foreground">טוען חשבוניות…</div>
+        <div className="px-5 py-8 text-center text-sm text-muted-foreground">
+          טוען חשבוניות…
+        </div>
+      )}
+      {error && (
+        <div className="px-5 py-4 text-center text-sm text-destructive">
+          שגיאה: {error}
+        </div>
+      )}
+      {!loading && !error && rows.length === 0 && (
+        <div className="px-5 py-8 text-center text-sm text-muted-foreground">
+          אין חשבוניות להצגה
+        </div>
       )}
 
-      {!loading && rows.length === 0 && (
-        <div className="px-5 py-8 text-center text-sm text-muted-foreground">אין חשבוניות זמינות</div>
-      )}
-
+      {/* ── Invoice List ── */}
       <ul className="space-y-2 px-3 pb-4">
-        {rows.map((r) => (
-          <li
-            key={r.doc_id}
-            className="flex items-center gap-3 rounded-2xl border border-border bg-surface-1 p-3"
-          >
-            {rowIcon(r.document_type)}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-semibold truncate">{r.supplier_name}</span>
-                {docTypeChip(r.document_type)}
-              </div>
-              <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
-                <span>{r.document_date}</span>
-                <span className="text-sm font-bold text-foreground tabular-nums">
-                  {r.amount_total ? `₪${r.amount_total}` : "—"}
-                </span>
-              </div>
-              {r.drive_url && (
-                <a
-                  href={r.drive_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-1 text-[10px] text-primary underline-offset-2 hover:underline"
-                >
-                  פתח ב-Drive
-                </a>
-              )}
-            </div>
-            <ChevronLeft className="size-4 text-muted-foreground" />
-          </li>
-        ))}
-      </ul>
+        {rows.map((r) => {
+          const dateStr = r.invoice_date ? String(r.invoice_date).slice(0, 10) : "";
+          const amountNum = parseFloat(r.amount) || 0;
+          const amountStr = amountNum
+            ? `₪${amountNum.toLocaleString("he-IL")}`
+            : "—";
+          const supplierLabel = r.supplier_name && r.supplier_name !== r.supplier_id
+            ? r.supplier_name
+            : r.supplier_id;
 
-      <div className="flex justify-center pb-4">
-        <button className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/30">
-          <Box className="size-4" /> סרוק חשבונית
-          <ShoppingBag className="size-4" />
-        </button>
-      </div>
+          return (
+            <li
+              key={r.invoice_id}
+              className="flex items-center gap-3 rounded-2xl border border-border bg-surface-1 p-3"
+            >
+              <div className="grid size-9 flex-shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                <ReceiptIcon className="size-4" />
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-semibold truncate">{supplierLabel}</span>
+                  {r.invoice_number && (
+                    <span className="text-[10px] text-muted-foreground shrink-0">
+                      #{r.invoice_number}
+                    </span>
+                  )}
+                </div>
+                <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
+                  <span>{dateStr}</span>
+                  <span className="text-sm font-bold text-foreground tabular-nums">
+                    {amountStr}
+                  </span>
+                </div>
+                {r.invoice_pdf && (
+                  <a
+                    href={`https://drive.google.com/drive/search?q=${encodeURIComponent(r.invoice_id)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-1 inline-block text-[10px] text-primary underline-offset-2 hover:underline"
+                  >
+                    צפה ב-Drive ↗
+                  </a>
+                )}
+              </div>
+
+              <ChevronLeft className="size-4 shrink-0 text-muted-foreground" />
+            </li>
+          );
+        })}
+      </ul>
 
       <PhoneTabs active="docs" />
     </AppShell>
